@@ -40,6 +40,7 @@ struct HistoryItemView: View {
       accessoryImage: item.thumbnailImage != nil ? nil : ColorImage.from(item.title),
       attributedTitle: item.attributedTitle,
       shortcuts: item.shortcuts,
+      rowActions: rowActions,
       isSelected: item.isSelected,
       selectionIndex: visualIndex,
       selectionAppearance: selectionAppearance
@@ -56,6 +57,35 @@ struct HistoryItemView: View {
         Task {
           appState.history.select(item)
         }
+      }
+    }
+    .contextMenu {
+      actionsMenu
+    }
+  }
+
+  @ViewBuilder
+  private var actionsMenu: some View {
+    if rowActions.isEmpty {
+      Text("No matching actions")
+    } else {
+      ForEach(rowActions) { rowAction in
+        Button(action: rowAction.run) {
+          Label(rowAction.title, systemImage: rowAction.systemImage)
+        }
+      }
+    }
+  }
+
+  private var rowActions: [RowActionItem] {
+    ActionEngine.shared.resolvedActions(for: item.item).enumerated().map { index, action in
+      RowActionItem(
+        id: action.id,
+        title: index == 0 ? "\(action.title) (default)" : action.title,
+        systemImage: action.systemImage
+      ) {
+        ActionEngine.shared.run(action, on: item.item)
+        appState.popup.close()
       }
     }
   }

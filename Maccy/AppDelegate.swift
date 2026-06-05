@@ -38,7 +38,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     AppState.shared.appDelegate = self
 
     Clipboard.shared.onNewCopy { History.shared.add($0) }
+    Clipboard.shared.onNewCopy { ActionEngine.shared.handleNewCopy($0) }
     Clipboard.shared.start()
+
+    KeyboardShortcuts.onKeyDown(for: .runDefaultAction) {
+      ActionEngine.shared.runDefaultActionForCurrent()
+    }
 
     Task {
       for await _ in Defaults.updates(.clipboardCheckInterval, initial: false) {
@@ -91,6 +96,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
   func applicationDidFinishLaunching(_ aNotification: Notification) {
     migrateUserDefaults()
     disableUnusedGlobalHotkeys()
+
+    // Prompt for Accessibility on launch if not yet granted (needed for paste).
+    Accessibility.check()
 
     panel = FloatingPanel(
       contentRect: NSRect(origin: .zero, size: Defaults[.windowSize]),

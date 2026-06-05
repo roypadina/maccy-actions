@@ -28,6 +28,14 @@ enum SelectionAppearance {
   }
 }
 
+// A clipboard action surfaced inline on a history row.
+struct RowActionItem: Identifiable {
+  let id: String
+  let title: String
+  let systemImage: String
+  let run: () -> Void
+}
+
 struct ListItemView<Title: View, ID: Hashable>: View {
   var id: ID
   var selectionId: UUID
@@ -36,6 +44,7 @@ struct ListItemView<Title: View, ID: Hashable>: View {
   var accessoryImage: NSImage?
   var attributedTitle: AttributedString?
   var shortcuts: [KeyShortcut]
+  var rowActions: [RowActionItem] = []
   var isSelected: Bool
   var selectionIndex: Int?
   var help: LocalizedStringKey?
@@ -81,6 +90,27 @@ struct ListItemView<Title: View, ID: Hashable>: View {
       Spacer()
 
       HStack(spacing: 5) {
+        if !rowActions.isEmpty {
+          Menu {
+            ForEach(rowActions) { rowAction in
+              Button(action: rowAction.run) {
+                Label(rowAction.title, systemImage: rowAction.systemImage)
+              }
+            }
+          } label: {
+            HStack(spacing: 1) {
+              Image(systemName: "bolt.fill")
+              Text("\(rowActions.count)")
+            }
+            .font(.caption)
+          }
+          .menuStyle(.borderlessButton)
+          .menuIndicator(.hidden)
+          .fixedSize()
+          .foregroundStyle(isSelected ? Color.white : Color.secondary)
+          .help("Actions")
+        }
+
         if let index = selectionIndex {
           Text("\(index + 1)")
             .font(.caption)
