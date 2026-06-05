@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="app_name">Maccy Sync</string>
+  <string name="pair_title">Pair with Mac</string>
+  <string name="accessibility_label">Maccy Sync clipboard capture</string>
+  <string name="accessibility_description">Lets Maccy Sync read clipboard changes so copies on this phone can sync to your Mac.</string>
+  <string name="tile_label">Capture clip</string>
+  <string name="fgs_channel">Clipboard sync</string>
+  <string name="fgs_title">Maccy Sync active</string>
+</resources>

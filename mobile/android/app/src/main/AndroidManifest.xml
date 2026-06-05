@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+  <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+  <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <uses-permission android:name="android.permission.CAMERA" />
+
+  <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+
+  <application
+    android:name=".MaccyApp"
+    android:allowBackup="true"
+    android:icon="@drawable/ic_launcher"
+    android:label="@string/app_name"
+    android:supportsRtl="true"
+    android:theme="@style/Theme.MaccySync">
+
+    <activity
+      android:name=".ui.MainActivity"
+      android:exported="true"
+      android:label="@string/app_name">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity>
+
+    <activity
+      android:name=".pairing.PairingActivity"
+      android:exported="false"
+      android:label="@string/pair_title" />
+
+    <service
+      android:name=".net.SyncForegroundService"
+      android:exported="false"
+      android:foregroundServiceType="dataSync" />
+
+    <service
+      android:name=".clipboard.ClipboardAccessibilityService"
+      android:exported="false"
+      android:label="@string/accessibility_label"
+      android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+      <intent-filter>
+        <action android:name="android.accessibilityservice.AccessibilityService" />
+      </intent-filter>
+      <meta-data
+        android:name="android.accessibilityservice"
+        android:resource="@xml/accessibility_service_config" />
+    </service>
+
+    <service
+      android:name=".tile.CaptureTileService"
+      android:exported="true"
+      android:icon="@drawable/ic_tile"
+      android:label="@string/tile_label"
+      android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+      <intent-filter>
+        <action android:name="android.service.quicksettings.action.QS_TILE" />
+      </intent-filter>
+    </service>
+
+  </application>
+</manifest>
