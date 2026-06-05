@@ -19,7 +19,7 @@ item on demand.
 | Transport | **LAN now, cloud later.** mDNS discovery + a direct end-to-end-encrypted socket on the local network, behind a `Transport` protocol so a cloud relay can be added later without touching sync/clipboard logic. |
 | Android capture | **AccessibilityService (auto).** A background accessibility service monitors clipboard changes and auto-captures every copy — the technique real Android clipboard-history apps use to beat the Android 10+ background-read restriction. Sideload-only (Play would reject); fine for a personal fork. |
 | Sync model | **Separate lists, browse on demand.** Each device keeps its own active clipboard. New clips stream to the peer in the background into a dedicated "remote device" history list. A shortcut opens the other device's history; pick an item → it is pasted/copied locally. No clobbering. |
-| Pairing / security | **QR scan + E2E.** Mac shows a QR (host/port + cert fingerprint + one-time token). Phone scans with the camera, connects, returns its own fingerprint authenticated by the token. **TLS 1.3 with mutual cert-pinning** secures all traffic (no third-party crypto lib, no hand-rolled crypto). Pins persisted → auto-reconnect via mDNS. |
+| Pairing / security | **QR scan + E2E.** Mac shows a QR (host/port + Ed25519 identity pubkey + one-time token). Phone scans, pins the Mac identity, and runs a **signed ephemeral-ECDH (STS) handshake**: X25519 key agreement + Ed25519 identity signatures + HKDF + ChaCha20-Poly1305 AEAD — standard primitives native to both platforms (CryptoKit / BouncyCastle), no TLS-cert plumbing, no hand-rolled cipher. Mutual auth + forward secrecy. Identities pinned + persisted → auto-reconnect via mDNS. See `docs/protocol/PROTOCOL.md`. |
 | Content types | **Text + images + files** (v1), with a size cap and chunked, lazy transfer (metadata pushed eagerly, bytes fetched on selection). |
 | Android stack | **Native Kotlin + Jetpack Compose** — required for AccessibilityService, ClipboardManager, NsdManager (mDNS), camera/QR, file access. |
 | Repo layout | **Monorepo.** `mobile/android/` now (room for `mobile/ios/` later), shared `docs/protocol/` spec as source of truth. |
@@ -67,15 +67,19 @@ bytes on request. Files send name/size/type + bytes on request.
 
 ## Security / pairing
 
-- Each device holds a long-lived self-signed identity cert (Mac: Keychain;
-  Android: Keystore).
-- **TLS 1.3 with mutual cert-pinning.** Each side validates the peer against a
-  pinned SHA-256 SPKI fingerprint (pin-only trust; CA chain ignored). Vetted on
-  both platforms (Network.framework / Android TLS); no third-party crypto lib.
-- **QR pairing:** Mac shows a QR = its host/port + cert fingerprint + one-time
-  token. Phone scans (CameraX + ML Kit, fallback ZXing), connects, returns its
-  own fingerprint authenticated by the token. Both persist the peer pin →
-  auto-reconnect via mDNS.
+- Each device holds a long-lived **Ed25519 identity keypair** (Mac: Keychain;
+  Android: encrypted prefs / Keystore-wrapped). Its public key is its pin.
+- **Signed ephemeral-ECDH (STS) handshake** over plain TCP — X25519 ephemeral
+  key agreement + Ed25519 identity signatures over both ephemerals (MITM
+  defeat) + HKDF-SHA256 → per-direction keys + ChaCha20-Poly1305 AEAD framing.
+  Standard primitives native to both platforms (CryptoKit on Mac, BouncyCastle
+  on Android); no TLS-cert plumbing, no hand-rolled cipher. Gives mutual auth +
+  forward secrecy.
+- **QR pairing:** Mac shows a QR = host/port + Ed25519 id pubkey + one-time
+  token. Phone scans (CameraX + ML Kit, fallback ZXing), pins the Mac identity,
+  and authenticates itself in the handshake via the token (`hs3.token`). Both
+  persist the peer id pub → auto-reconnect via mDNS.
+- Full wire contract: `docs/protocol/PROTOCOL.md`.
 
 ## Mac components (`Maccy/Sync/`)
 
