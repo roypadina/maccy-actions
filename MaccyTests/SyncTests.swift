@@ -236,4 +236,62 @@ final class SyncTests: XCTestCase {
     store.clear()
     XCTAssertTrue(store.items.isEmpty)
   }
+
+  // MARK: - Cross-language interop (must match the Kotlin InteropVectorGen vectors)
+
+  func testInteropGoldenVectors() throws {
+    let edSeed = Data((0..<32).map { UInt8($0) })
+    let msg = Data("MaccySync-interop".utf8)
+    let signingKey = try Curve25519.Signing.PrivateKey(rawRepresentation: edSeed)
+    XCTAssertEqual(signingKey.publicKey.rawRepresentation.hexString,
+                   "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8")
+    // Cross-verify the BouncyCastle-produced Ed25519 signature.
+    let edSig = Data(hex:
+      "368fb74e1ee5fe1757fbc1a1645a3914535a25f6e9f7193dad956bacbec5f191" +
+      "271c9eacd7d3eb20328944d9cd2317ec46ce19be25160725bc430d58f05f070f")!
+    XCTAssertTrue(SyncIdentity.verify(signature: edSig, message: msg,
+                                      publicKeyRaw: signingKey.publicKey.rawRepresentation))
+
+    let clientPriv = try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: Data(repeating: 0x11, count: 32))
+    let serverPriv = try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: Data(repeating: 0x22, count: 32))
+    let clientPub = clientPriv.publicKey.rawRepresentation
+    let serverPub = serverPriv.publicKey.rawRepresentation
+    XCTAssertEqual(clientPub.hexString, "7b4e909bbe7ffe44c465a220037d608ee35897d31ef972f07f74892cb0f73f13")
+    XCTAssertEqual(serverPub.hexString, "0faa684ed28867b97f4a6a2dee5df8ce974e76b7018e3f22a1c4cf2678570f20")
+
+    let shared = try clientPriv.sharedSecretFromKeyAgreement(with: .init(rawRepresentation: serverPub))
+    let sharedBytes = shared.withUnsafeBytes { Data($0) }
+    XCTAssertEqual(sharedBytes.hexString, "9e004098efc091d4ec2663b4e9f5cfd4d7064571690b4bea97ab146ab9f35056")
+
+    let salt = clientPub + serverPub
+    let c2s = HKDF<SHA256>.deriveKey(inputKeyMaterial: SymmetricKey(data: sharedBytes),
+                                     salt: salt, info: Data("MaccySync-v1-c2s".utf8), outputByteCount: 32)
+    let s2c = HKDF<SHA256>.deriveKey(inputKeyMaterial: SymmetricKey(data: sharedBytes),
+                                     salt: salt, info: Data("MaccySync-v1-s2c".utf8), outputByteCount: 32)
+    XCTAssertEqual(c2s.withUnsafeBytes { Data($0) }.hexString,
+                   "1df9915fb61c766ab5558bb1e7843c1b9993a398011ba8d255e8486c5e97cefa")
+    XCTAssertEqual(s2c.withUnsafeBytes { Data($0) }.hexString,
+                   "646e7e4458201270bc0f0650ec6408addc1b217fdc22438f81ed778124b137e9")
+
+    let aeadKey = SymmetricKey(data: Data(repeating: 0x33, count: 32))
+    let sealed = try SessionCipher(c2s: aeadKey, s2c: aeadKey, isServer: false).seal(Data("interop-test".utf8))
+    XCTAssertEqual(sealed.hexString, "bea2fd2f2bd685616164663676455d54a6ed510c77d80c5db9928c06")
+  }
+}
+
+private extension Data {
+  var hexString: String { map { String(format: "%02x", $0) }.joined() }
+
+  init?(hex: String) {
+    guard hex.count % 2 == 0 else { return nil }
+    var data = Data(capacity: hex.count / 2)
+    var index = hex.startIndex
+    while index < hex.endIndex {
+      let next = hex.index(index, offsetBy: 2)
+      guard let byte = UInt8(hex[index..<next], radix: 16) else { return nil }
+      data.append(byte)
+      index = next
+    }
+    self = data
+  }
 }
