@@ -154,6 +154,7 @@ private fun SettingsScreen(app: MaccyApp) {
   var syncEnabled by remember { mutableStateOf(app.prefs.syncEnabled) }
   var sendText by remember { mutableStateOf(app.prefs.sendText) }
   var deviceName by remember { mutableStateOf(app.prefs.deviceName) }
+  var paired by remember { mutableStateOf(app.prefs.isPaired) }
   val a11yEnabled = isAccessibilityEnabled(context)
 
   Column(
@@ -191,7 +192,7 @@ private fun SettingsScreen(app: MaccyApp) {
     Card(Modifier.fillMaxWidth()) {
       Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("Pairing", style = MaterialTheme.typography.titleMedium)
-        if (app.prefs.isPaired) {
+        if (paired) {
           Text("Paired with ${app.prefs.macName ?: "Mac"}", style = MaterialTheme.typography.bodyMedium)
           Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = { context.startActivity(Intent(context, PairingActivity::class.java)) }) {
@@ -200,6 +201,7 @@ private fun SettingsScreen(app: MaccyApp) {
             Button(onClick = {
               app.controller.unpair()
               SyncForegroundService.stop(context)
+              paired = false
             }) { Text("Unpair") }
           }
         } else {

@@ -11,6 +11,7 @@ struct SyncSettingsPane: View {
   @Default(.syncSendText) private var sendText
   @Default(.syncSendImages) private var sendImages
   @Default(.syncSendFiles) private var sendFiles
+  @Default(.syncPairedDevice) private var pairedDevice
 
   @State private var sync = LanSyncService.shared
 
@@ -60,7 +61,7 @@ struct SyncSettingsPane: View {
     switch sync.state {
     case .connected: return "Connected to \(sync.connectedPeerName)"
     case .pairing: return "Waiting for phone to scan…"
-    case .listening: return sync.isPaired ? "Waiting for \(sync.pairedDevice?.name ?? "phone")" : "Ready to pair"
+    case .listening: return pairedDevice != nil ? "Waiting for \(pairedDevice?.name ?? "phone")" : "Ready to pair"
     case .off: return "Off"
     }
   }
@@ -78,7 +79,7 @@ struct SyncSettingsPane: View {
           .frame(width: 180, height: 180)
         Button("Cancel") { sync.cancelPairing() }
       }
-    } else if let device = sync.pairedDevice {
+    } else if let device = pairedDevice {
       VStack(alignment: .leading, spacing: 8) {
         HStack {
           Image(systemName: "iphone")
