@@ -7,7 +7,6 @@
   <string name="tile_label">Capture clip</string>
   <string name="fgs_channel">Clipboard sync</string>
   <string name="fgs_title">Maccy Sync active</string>
-  <string name="fgs_text">Tap to send your latest copy to the Mac</string>
+  <string name="fgs_text">Tap to sync all clips to the Mac</string>
   <string name="fgs_open">Open</string>
-  <string name="fgs_sync_all">Sync all</string>
 </resources>
