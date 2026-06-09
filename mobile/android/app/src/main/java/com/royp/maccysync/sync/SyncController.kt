@@ -436,6 +436,24 @@ class SyncController(
     }
   }
 
+  /**
+   * On app open: always surface the current clipboard value in the "This Phone"
+   * list so it's there to send. Unlike auto-capture this ignores the Mac-origin
+   * guard (the user explicitly opened the app and wants to see/send the current
+   * clip), but still skips our own just-written value and avoids spamming a
+   * duplicate when it already sits at the top. Never auto-sends.
+   */
+  fun captureForList(rawText: String) {
+    scope.launch {
+      if (rawText.isNotBlank() &&
+        !ClipboardWriter.wasJustWritten(rawText) &&
+        repo.latestLocalText() != rawText
+      ) {
+        repo.upsertLocal(ClipboardCapture.metaFor(rawText))
+      }
+    }
+  }
+
   // MARK: applying a Mac clip on this phone
 
   suspend fun applyMacClip(meta: ItemMeta): Boolean {

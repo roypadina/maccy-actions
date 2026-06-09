@@ -111,7 +111,8 @@ class MainActivity : ComponentActivity() {
     val app = application as MaccyApp
     // Revive a connection Samsung may have frozen in the background + pull latest.
     app.controller.nudge()
-    ClipboardCapture.currentText(this)?.let { app.controller.onLocalText(it) }
+    // Always surface the current clipboard value in the This Phone list on open.
+    ClipboardCapture.currentText(this)?.let { app.controller.captureForList(it) }
   }
 
   private fun requestNotificationPermission() {
