@@ -39,17 +39,46 @@ final class SyncIdentity {
   }
 
   // Load the persisted identity, generating + storing one on first use.
+  //
+  // Primary store is a FILE in the app container: it survives rebuilds/redeploys,
+  // unlike the Keychain whose item is bound to the app's code signature and gets
+  // lost when the binary is replaced — which silently rotated our identity and
+  // broke pairing. Keychain is kept as a legacy/secondary store and migrated in.
   static func loadOrCreate() -> SyncIdentity {
+    if let raw = readIdentityFile(),
+       let key = try? Curve25519.Signing.PrivateKey(rawRepresentation: raw) {
+      return SyncIdentity(privateKey: key)
+    }
     if let raw = Keychain.read(account: keychainAccount),
        let key = try? Curve25519.Signing.PrivateKey(rawRepresentation: raw) {
+      writeIdentityFile(raw)   // migrate the existing identity to the stable file
       return SyncIdentity(privateKey: key)
     }
     let key = Curve25519.Signing.PrivateKey()
     Keychain.write(key.rawRepresentation, account: keychainAccount)
+    writeIdentityFile(key.rawRepresentation)
     return SyncIdentity(privateKey: key)
   }
 
   private static let keychainAccount = "sync-identity-ed25519"
+
+  private static var identityFileURL: URL {
+    let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+      .appendingPathComponent("MaccyActions", isDirectory: true)
+    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    return dir.appendingPathComponent("sync-identity.key")
+  }
+
+  private static func readIdentityFile() -> Data? {
+    let data = try? Data(contentsOf: identityFileURL)
+    return (data?.count == 32) ? data : nil
+  }
+
+  private static func writeIdentityFile(_ raw: Data) {
+    try? raw.write(to: identityFileURL, options: [.atomic])
+    try? FileManager.default.setAttributes(
+      [.posixPermissions: 0o600], ofItemAtPath: identityFileURL.path)
+  }
 }
 
 // MARK: - Handshake key agreement
