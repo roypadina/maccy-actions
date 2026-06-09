@@ -75,6 +75,13 @@ final class ActionEngine {
         }
       }
     }
+    // Always offer "Send to Phone" on any clip (incl. files/images) when a phone is
+    // connected — no rule needed. Appended last so it never becomes the default
+    // action, and never auto-runs (auto-run is rule-driven, this isn't a rule).
+    let sendToPhone = SendToAndroidAction()
+    if sendToPhone.canRun(on: item), seen.insert(sendToPhone.id).inserted {
+      result.append(sendToPhone)
+    }
     return result
   }
 
