@@ -261,7 +261,10 @@ class SyncController(
       "requestHistory" -> sendHistorySync(peer)
       "clipAdded" -> message.item?.let { repo.upsertMac(it) }
       "contentRequest" -> message.id?.let { serveContent(peer, it) }
-      "contentBegin" -> message.id?.let { id ->
+      "contentBegin" -> message.id?.let { rawId ->
+        // Swift sends UPPERCASE UUIDs; chunk dispatch uses Java's lowercase
+        // chunk.id.toString(). Key all receive maps by the lowercase id so they match.
+        val id = rawId.lowercase()
         if (message.kind == "file") {
           // Stream straight to a temp file in the cache dir.
           val tmp = File(appContext.cacheDir, "dl-$id")
@@ -272,7 +275,8 @@ class SyncController(
           fetchBuffers[id] = ByteArrayOutputStream()
         }
       }
-      "contentError" -> message.id?.let { id ->
+      "contentError" -> message.id?.let { rawId ->
+        val id = rawId.lowercase()
         val err = IOException(message.reason ?: "content error")
         fetchWaiters.remove(id)?.completeExceptionally(err)
         fetchBuffers.remove(id)
@@ -368,12 +372,13 @@ class SyncController(
   // MARK: fetching Mac content
 
   private suspend fun fetchContent(id: String): ByteArray {
-    repo.cachedContentFile(id)?.let { return it.readBytes() }
+    val key = id.lowercase()  // internal maps are keyed lowercase (see contentBegin)
+    repo.cachedContentFile(key)?.let { return it.readBytes() }
     val peer = this.peer ?: throw IOException("not connected")
     val waiter = CompletableDeferred<ByteArray>()
-    fetchWaiters[id] = waiter
-    fetchBuffers[id] = ByteArrayOutputStream()
-    peer.send(Control.contentRequest(id))
+    fetchWaiters[key] = waiter
+    fetchBuffers[key] = ByteArrayOutputStream()
+    peer.send(Control.contentRequest(id))  // wire id stays as the Mac knows it
     return withTimeout(30_000) { waiter.await() }
   }
 
@@ -382,7 +387,7 @@ class SyncController(
   private suspend fun fetchContentToFile(id: String): File {
     val peer = this.peer ?: throw IOException("not connected")
     val waiter = CompletableDeferred<File>()
-    fetchFileWaiters[id] = waiter
+    fetchFileWaiters[id.lowercase()] = waiter  // match lowercase chunk.id dispatch
     peer.send(Control.contentRequest(id))
     return withTimeout(300_000) { waiter.await() }
   }
@@ -394,7 +399,7 @@ class SyncController(
    */
   fun downloadToUri(meta: ItemMeta, dest: Uri, onResult: (Boolean) -> Unit) {
     scope.launch {
-      dlId = meta.id
+      dlId = meta.id.lowercase()  // handleContent matches by lowercase chunk.id
       dlName = meta.filename ?: "file"
       dlTotal = meta.size.toLong()
       _transfer.value = Transfer(dlName, 0, dlTotal, incoming = true)
