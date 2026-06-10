@@ -38,7 +38,14 @@ final class LanSyncService: SyncService {
   private var fetchFileHandles: [String: FileHandle] = [:]
   private var fetchFileURLs: [String: URL] = [:]
   private var fetchFileConts: [String: CheckedContinuation<URL, Error>] = [:]
+  // Incoming-file progress (phone→Mac), for the notification shown while receiving.
+  private struct Incoming { let name: String; let total: Int; var received: Int; var lastPct: Int }
+  private var incoming: [String: Incoming] = [:]
   private var pingTimer: Timer?
+
+  private static func byteString(_ count: Int) -> String {
+    ByteCountFormatter.string(fromByteCount: Int64(count), countStyle: .file)
+  }
 
   // MARK: - Lifecycle
 
@@ -149,6 +156,11 @@ final class LanSyncService: SyncService {
     for (_, handle) in fetchFileHandles { try? handle.close() }
     fetchFileHandles.removeAll()
     fetchFileURLs.removeAll()
+    // Any in-flight incoming file died with the connection — make it visible.
+    for (id, inc) in incoming {
+      Notifier.progress(id: "sync-rx-\(id)", title: "Transfer interrupted", body: "\(inc.name) — connection dropped")
+    }
+    incoming.removeAll()
     state = listener != nil ? .listening : .off
   }
 
@@ -183,7 +195,7 @@ final class LanSyncService: SyncService {
     case let .contentRequest(id):
       serveContent(id: id)
 
-    case let .contentBegin(id, kind, _, _, filename):
+    case let .contentBegin(id, kind, size, _, filename):
       if kind == ItemMeta.Kind.file.rawValue {
         // Stream a file straight to disk (never buffer 256 MiB in RAM).
         let dest = SyncContent.phoneFileURL(id: id, filename: filename)
@@ -191,6 +203,13 @@ final class LanSyncService: SyncService {
         if let handle = try? FileHandle(forWritingTo: dest) {
           fetchFileHandles[id] = handle
           fetchFileURLs[id] = dest
+          // Show a "Receiving …" notification with live % so a large transfer is
+          // visible (and a stall/failure is obvious instead of silent).
+          let name = filename ?? "file"
+          incoming[id] = Incoming(name: name, total: size, received: 0, lastPct: -1)
+          let from = connectedPeerName.isEmpty ? "Phone" : connectedPeerName
+          Notifier.progress(id: "sync-rx-\(id)", title: "Receiving from \(from)",
+                            body: size > 0 ? "\(name) — 0% of \(Self.byteString(size))" : name)
         } else {
           fetchFileConts.removeValue(forKey: id)?.resume(throwing: SyncCryptoError.openFailed)
         }
@@ -206,6 +225,9 @@ final class LanSyncService: SyncService {
       if let handle = fetchFileHandles.removeValue(forKey: id) { try? handle.close() }
       fetchFileURLs[id] = nil
       fetchFileConts.removeValue(forKey: id)?.resume(throwing: SyncCryptoError.openFailed)
+      if let inc = incoming.removeValue(forKey: id) {
+        Notifier.progress(id: "sync-rx-\(id)", title: "Transfer failed", body: inc.name)
+      }
 
     case .ping:
       send(.pong)
@@ -220,10 +242,26 @@ final class LanSyncService: SyncService {
     // File stream → write straight to the open handle.
     if let handle = fetchFileHandles[id] {
       try? handle.write(contentsOf: chunk.bytes)
+      // Update the receiving notification (throttled to ~every 5%).
+      if var inc = incoming[id] {
+        inc.received += chunk.bytes.count
+        let pct = inc.total > 0 ? Int(Double(inc.received) / Double(inc.total) * 100) : 0
+        if chunk.last || pct >= inc.lastPct + 5 {
+          inc.lastPct = pct
+          let from = connectedPeerName.isEmpty ? "Phone" : connectedPeerName
+          Notifier.progress(id: "sync-rx-\(id)", title: "Receiving from \(from)",
+                            body: "\(inc.name) — \(pct)% of \(Self.byteString(inc.total))")
+        }
+        incoming[id] = inc
+      }
       guard chunk.last else { return }
       try? handle.close()
       fetchFileHandles[id] = nil
       let url = fetchFileURLs.removeValue(forKey: id)
+      if let inc = incoming.removeValue(forKey: id) {
+        Notifier.progress(id: "sync-rx-\(id)", title: "Received \(inc.name)",
+                          body: "From \(connectedPeerName.isEmpty ? "Phone" : connectedPeerName) · \(Self.byteString(inc.total))")
+      }
       if let cont = fetchFileConts.removeValue(forKey: id) {
         if let url { cont.resume(returning: url) } else { cont.resume(throwing: SyncCryptoError.openFailed) }
       }
@@ -283,8 +321,12 @@ final class LanSyncService: SyncService {
   // MARK: - Serving content to the peer
 
   private func serveContent(id: String) {
-    guard let item = announced[id] else { send(.contentError(id: id, reason: "not_found")); return }
+    guard let item = announced[id] else {
+      NSLog("MaccySync serveContent NOT ANNOUNCED id=\(id)")
+      send(.contentError(id: id, reason: "not_found")); return
+    }
     guard let uuid = UUID(uuidString: id) else { send(.contentError(id: id, reason: "bad_id")); return }
+    NSLog("MaccySync serveContent id=\(id) fileURLs=\(item.fileURLs.count) kind=\(item.fileURLs.first != nil ? "file" : "other")")
     // Files stream from disk (no whole-file load); text/image stay in RAM.
     if let url = item.fileURLs.first {
       serveFile(id: id, uuid: uuid, url: url)
@@ -304,10 +346,20 @@ final class LanSyncService: SyncService {
   // Stream a file from disk → chunks. Reads on the main actor but yields between
   // chunks so the UI stays responsive even for a large (256 MiB) transfer.
   private func serveFile(id: String, uuid: UUID, url: URL) {
+    // Sandboxed app: a copied file's URL may need its security scope re-asserted
+    // before we can read its bytes. Harmless (returns false) if there's no scope.
+    let scoped = url.startAccessingSecurityScopedResource()
     let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
     let size = (attrs?[.size] as? Int) ?? 0
-    guard size <= SyncProtocol.maxContent else { send(.contentError(id: id, reason: "too_large")); return }
+    let readable = FileManager.default.isReadableFile(atPath: url.path)
+    NSLog("MaccySync serveFile path=\(url.path) size=\(size) scoped=\(scoped) readable=\(readable)")
+    guard size <= SyncProtocol.maxContent else {
+      if scoped { url.stopAccessingSecurityScopedResource() }
+      send(.contentError(id: id, reason: "too_large")); return
+    }
     guard let handle = try? FileHandle(forReadingFrom: url) else {
+      NSLog("MaccySync serveFile OPEN FAILED (sandbox?) path=\(url.path)")
+      if scoped { url.stopAccessingSecurityScopedResource() }
       send(.contentError(id: id, reason: "not_found")); return
     }
     let mime = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
@@ -316,10 +368,11 @@ final class LanSyncService: SyncService {
     if size == 0 {
       peer?.send(ContentChunk(id: uuid, seq: 0, last: true, bytes: Data()))
       try? handle.close()
+      if scoped { url.stopAccessingSecurityScopedResource() }
       return
     }
     Task { @MainActor in
-      defer { try? handle.close() }
+      defer { try? handle.close(); if scoped { url.stopAccessingSecurityScopedResource() } }
       var seq: UInt32 = 0
       var offset = 0
       while offset < size {

@@ -38,4 +38,26 @@ class Notifier {
       }
     }
   }
+
+  /// Post/update a notification under a STABLE identifier so repeated calls coalesce
+  /// (macOS replaces the existing one in place) — used for live transfer progress.
+  /// macOS notifications can't host a real progress bar, so progress shows as a
+  /// percentage in the body. Call `clear(id:)` to remove it when done.
+  static func progress(id: String, title: String, body: String) {
+    authorize()
+    center.getNotificationSettings { settings in
+      guard settings.authorizationStatus == .authorized ||
+            settings.authorizationStatus == .provisional else { return }
+      let content = UNMutableNotificationContent()
+      content.title = title
+      content.body = body
+      let request = UNNotificationRequest(identifier: id, content: content, trigger: nil)
+      center.add(request, withCompletionHandler: nil)
+    }
+  }
+
+  static func clear(id: String) {
+    center.removeDeliveredNotifications(withIdentifiers: [id])
+    center.removePendingNotificationRequests(withIdentifiers: [id])
+  }
 }
