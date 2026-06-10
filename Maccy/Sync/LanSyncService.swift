@@ -363,25 +363,38 @@ final class LanSyncService: SyncService {
       send(.contentError(id: id, reason: "not_found")); return
     }
     let mime = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
+    let name = url.lastPathComponent
+    let dest = connectedPeerName.isEmpty ? "Phone" : connectedPeerName
     send(.contentBegin(id: id, kind: ItemMeta.Kind.file.rawValue, size: size,
-                       mime: mime, filename: url.lastPathComponent))
+                       mime: mime, filename: name))
+    Notifier.progress(id: "sync-tx-\(id)", title: "Sending to \(dest)",
+                      body: "\(name) — 0% of \(Self.byteString(size))")
     if size == 0 {
       peer?.send(ContentChunk(id: uuid, seq: 0, last: true, bytes: Data()))
       try? handle.close()
       if scoped { url.stopAccessingSecurityScopedResource() }
+      Notifier.progress(id: "sync-tx-\(id)", title: "Sent \(name)", body: "To \(dest)")
       return
     }
     Task { @MainActor in
       defer { try? handle.close(); if scoped { url.stopAccessingSecurityScopedResource() } }
       var seq: UInt32 = 0
       var offset = 0
+      var lastPct = -1
       while offset < size {
         guard let chunk = try? handle.read(upToCount: SyncProtocol.chunkSize), !chunk.isEmpty else { break }
         offset += chunk.count
         peer?.send(ContentChunk(id: uuid, seq: seq, last: offset >= size, bytes: chunk))
+        let pct = Int(Double(offset) / Double(size) * 100)
+        if offset >= size || pct >= lastPct + 5 {
+          lastPct = pct
+          Notifier.progress(id: "sync-tx-\(id)", title: "Sending to \(dest)",
+                            body: "\(name) — \(pct)% of \(Self.byteString(size))")
+        }
         seq += 1
         await Task.yield()
       }
+      Notifier.progress(id: "sync-tx-\(id)", title: "Sent \(name)", body: "To \(dest)")
     }
   }
 

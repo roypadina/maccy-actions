@@ -52,6 +52,16 @@ class SyncController(
   private val _peerName = MutableStateFlow(prefs.macName ?: "")
   val peerName: StateFlow<String> = _peerName
 
+  // Live file-transfer indication (both directions). UI observes this to show a
+  // progress sheet; null when idle.
+  data class Transfer(val name: String, val done: Long, val total: Long, val incoming: Boolean)
+  private val _transfer = MutableStateFlow<Transfer?>(null)
+  val transfer: StateFlow<Transfer?> = _transfer
+  // Active download (Mac→phone) bookkeeping so handleContent can report progress.
+  @Volatile private var dlId: String? = null
+  @Volatile private var dlName: String = ""
+  @Volatile private var dlTotal: Long = 0L
+
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
   private val identity: Identity = prefs.identity()
   private var peer: PeerSocket? = null
@@ -282,6 +292,11 @@ class SyncController(
     val fileStream = fetchFileStreams[id]
     if (fileStream != null) {
       runCatching { fileStream.write(chunk.bytes) }
+      // Report download progress (Mac→phone) for the active download.
+      if (id == dlId) {
+        val done = (_transfer.value?.done ?: 0L) + chunk.bytes.size
+        _transfer.value = Transfer(dlName, done, dlTotal, incoming = true)
+      }
       if (!chunk.last) return
       runCatching { fileStream.close() }
       fetchFileStreams.remove(id)
@@ -329,17 +344,24 @@ class SyncController(
     if (size > Protocol.MAX_CONTENT) { peer.send(Control.contentError(id, "too_large")); return }
     peer.send(Control.contentBegin(id, entity.kind, size.toInt(), entity.mime, entity.filename))
     if (size == 0L) { peer.send(ContentChunk(uuid, 0, true, ByteArray(0))); return }
-    file.inputStream().use { input ->
-      val buf = ByteArray(Protocol.CHUNK_SIZE)
-      var seq = 0
-      var sent = 0L
-      while (true) {
-        val n = input.read(buf)
-        if (n <= 0) break
-        sent += n
-        peer.send(ContentChunk(uuid, seq, sent >= size, buf.copyOf(n)))
-        seq++
+    val label = entity.filename ?: "file"
+    _transfer.value = Transfer(label, 0, size, incoming = false)
+    try {
+      file.inputStream().use { input ->
+        val buf = ByteArray(Protocol.CHUNK_SIZE)
+        var seq = 0
+        var sent = 0L
+        while (true) {
+          val n = input.read(buf)
+          if (n <= 0) break
+          sent += n
+          peer.send(ContentChunk(uuid, seq, sent >= size, buf.copyOf(n)))
+          _transfer.value = Transfer(label, sent, size, incoming = false)
+          seq++
+        }
       }
+    } finally {
+      _transfer.value = null
     }
   }
 
@@ -363,6 +385,35 @@ class SyncController(
     fetchFileWaiters[id] = waiter
     peer.send(Control.contentRequest(id))
     return withTimeout(300_000) { waiter.await() }
+  }
+
+  /**
+   * Download a Mac FILE clip to a user-chosen destination (SAF document URI),
+   * streaming from the Mac to a temp file then copying into the destination.
+   * Shows live progress via the [transfer] flow. onResult(success).
+   */
+  fun downloadToUri(meta: ItemMeta, dest: Uri, onResult: (Boolean) -> Unit) {
+    scope.launch {
+      dlId = meta.id
+      dlName = meta.filename ?: "file"
+      dlTotal = meta.size.toLong()
+      _transfer.value = Transfer(dlName, 0, dlTotal, incoming = true)
+      val tmp = runCatching { fetchContentToFile(meta.id) }.getOrNull()
+      dlId = null
+      if (tmp == null) {
+        _transfer.value = null
+        withContext(Dispatchers.Main) { onResult(false) }
+        return@launch
+      }
+      val ok = runCatching {
+        appContext.contentResolver.openOutputStream(dest)?.use { out ->
+          tmp.inputStream().use { it.copyTo(out) }
+        } != null
+      }.getOrDefault(false)
+      tmp.delete()
+      _transfer.value = null
+      withContext(Dispatchers.Main) { onResult(ok) }
+    }
   }
 
   // MARK: outbound (local clip -> Mac)

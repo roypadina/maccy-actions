@@ -55,9 +55,12 @@ import androidx.compose.material.icons.rounded.Notes
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -171,6 +174,36 @@ private fun ClipsScreen(app: MaccyApp) {
     uri?.let { app.controller.importFile(it) { ok -> toast(if (ok) "Added — tap ↑ to send" else "Couldn't add file") } }
   }
 
+  // Live transfer indicator (both directions).
+  val transfer by app.controller.transfer.collectAsStateWithLifecycle(initialValue = null)
+  // Mac→phone download: choose where to save, then stream + offer to open.
+  var pendingDownload by remember { mutableStateOf<ClipEntity?>(null) }
+  var savedFile by remember { mutableStateOf<Pair<Uri, String>?>(null) }  // (uri, mime) for "Open"
+  val saveFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { uri ->
+    val clip = pendingDownload; pendingDownload = null
+    if (uri != null && clip != null) {
+      app.controller.downloadToUri(clip.toMeta(), uri) { ok ->
+        if (ok) savedFile = uri to (clip.mime ?: "*/*") else toast("Download failed — keep the phone open")
+      }
+    }
+  }
+
+  transfer?.let { TransferSheet(it) }
+  savedFile?.let { (uri, mime) ->
+    OpenSavedDialog(
+      onOpen = {
+        runCatching {
+          context.startActivity(
+            Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime)
+              .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+          )
+        }.onFailure { toast("No app to open this file") }
+        savedFile = null
+      },
+      onDismiss = { savedFile = null }
+    )
+  }
+
   Column(Modifier.fillMaxSize().statusBarsPadding()) {
     Hero(state, peerName, app.prefs.isPaired, app.prefs.macName, phoneClips.size, macClips.size)
 
@@ -209,14 +242,16 @@ private fun ClipsScreen(app: MaccyApp) {
               onTrailing = upload
             )
           } else {
-            // Download from Mac: file → save to Downloads; text/image → onto clipboard.
+            // File → pick a save location (then stream + offer Open); text/image → clipboard/Pictures.
             val download: () -> Unit = {
-              scope.launch {
-                val ok = withContext(Dispatchers.IO) { app.controller.applyMacClip(clip.toMeta()) }
-                toast(
-                  if (ok) (if (isFile) "Saved to Downloads/MaccySync" else "Copied to clipboard")
-                  else "Couldn't fetch — connect the phone"
-                )
+              if (isFile) {
+                pendingDownload = clip
+                saveFile.launch(clip.filename ?: "file")
+              } else {
+                scope.launch {
+                  val ok = withContext(Dispatchers.IO) { app.controller.applyMacClip(clip.toMeta()) }
+                  toast(if (ok) "Copied to clipboard" else "Couldn't fetch — connect the phone")
+                }
               }
             }
             ClipRow(
@@ -351,6 +386,39 @@ private fun AttachFileButton(onClick: () -> Unit) {
     Spacer(Modifier.width(8.dp))
     Text("Attach a file", color = Hue.text, style = MaterialTheme.typography.labelLarge)
   }
+}
+
+@Composable
+private fun TransferSheet(t: SyncController.Transfer) {
+  val ctx = LocalContext.current
+  val pct = if (t.total > 0) (t.done.toFloat() / t.total).coerceIn(0f, 1f) else 0f
+  fun human(b: Long) = android.text.format.Formatter.formatShortFileSize(ctx, b)
+  AlertDialog(
+    onDismissRequest = {},
+    confirmButton = {},
+    title = { Text(if (t.incoming) "Receiving from Mac" else "Sending to Mac") },
+    text = {
+      Column {
+        Text(t.name, color = Hue.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Spacer(Modifier.height(14.dp))
+        LinearProgressIndicator(progress = { pct }, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(8.dp))
+        Text("${(pct * 100).toInt()}%  ·  ${human(t.done)} / ${human(t.total)}",
+          color = Hue.muted, style = MaterialTheme.typography.bodySmall)
+      }
+    }
+  )
+}
+
+@Composable
+private fun OpenSavedDialog(onOpen: () -> Unit, onDismiss: () -> Unit) {
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text("Saved") },
+    text = { Text("File downloaded from your Mac.") },
+    confirmButton = { TextButton(onClick = onOpen) { Text("Open") } },
+    dismissButton = { TextButton(onClick = onDismiss) { Text("Done") } }
+  )
 }
 
 @Composable
