@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 struct ActionsSettingsPane: View {
   @Default(.actionRules) private var rules
   @State private var selection: ActionRule.ID?
+  @State private var showingTerminalApps = false
 
   var body: some View {
     HStack(spacing: 0) {
@@ -14,6 +15,9 @@ struct ActionsSettingsPane: View {
       detail
     }
     .frame(width: 760, height: 520)
+    .sheet(isPresented: $showingTerminalApps) {
+      TerminalAppsEditor()
+    }
   }
 
   private var sidebar: some View {
@@ -36,6 +40,8 @@ struct ActionsSettingsPane: View {
         Button(action: removeSelected) { Image(systemName: "minus") }
           .disabled(selection == nil)
         Spacer()
+        Button("Terminal apps…") { showingTerminalApps = true }
+          .font(.caption)
       }
       .buttonStyle(.borderless)
       .padding(6)
@@ -208,6 +214,7 @@ private struct RuleEditor: View {
 private struct ConditionRow: View {
   @Binding var condition: RuleCondition
   var onDelete: () -> Void
+  @State private var showingTerminalApps = false
 
   private enum CondType: String, CaseIterable, Identifiable {
     case kind, regex, contains, sourceApp, softWrapped, terminalSource
@@ -251,10 +258,16 @@ private struct ConditionRow: View {
         Text("Copy looks like a wrapped terminal command").foregroundStyle(.secondary)
       case .terminalSource:
         Text("Copied from a configured terminal app").foregroundStyle(.secondary)
+        Button("Manage…") { showingTerminalApps = true }
+          .buttonStyle(.borderless)
+          .font(.caption)
       }
 
       Button(action: onDelete) { Image(systemName: "trash") }
         .buttonStyle(.borderless)
+    }
+    .sheet(isPresented: $showingTerminalApps) {
+      TerminalAppsEditor()
     }
   }
 
@@ -318,6 +331,10 @@ private struct ActionRow: View {
   var onMakeDefault: () -> Void
   var onDelete: () -> Void
 
+  private var shortcutName: KeyboardShortcuts.Name {
+    KeyboardShortcuts.Name("action_\(action.id.uuidString)")
+  }
+
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
       HStack {
@@ -347,6 +364,34 @@ private struct ActionRow: View {
       }
 
       params
+      shortcutRow
+    }
+    .onAppear { syncRecorder() }
+  }
+
+  private var shortcutRow: some View {
+    VStack(alignment: .leading, spacing: 2) {
+      HStack {
+        Text("Shortcut:")
+        KeyboardShortcuts.Recorder(for: shortcutName) { newShortcut in
+          action.shortcut = newShortcut.flatMap(ShortcutSpec.format)
+          ActionEngine.shared.registerShortcuts()
+        }
+      }
+      Text("Runs this action on the current clip, regardless of rules.")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    }
+  }
+
+  // Push the stored spec into the KeyboardShortcuts store so a freshly opened
+  // editor displays the saved value. registerShortcuts() already does this at
+  // launch; this just reflects current state for this action's Recorder.
+  private func syncRecorder() {
+    if let spec = action.shortcut, let parsed = ShortcutSpec.parse(spec) {
+      KeyboardShortcuts.setShortcut(parsed, for: shortcutName)
+    } else {
+      KeyboardShortcuts.setShortcut(nil, for: shortcutName)
     }
   }
 
@@ -387,6 +432,55 @@ private struct ActionRow: View {
   }
   private var shortcutBinding: Binding<String> {
     Binding(get: { action.shortcutName ?? "" }, set: { action.shortcutName = $0 })
+  }
+}
+
+// MARK: - Terminal apps editor
+
+private struct TerminalAppsEditor: View {
+  @Default(.terminalAppBundleIDs) private var bundleIDs
+  @Environment(\.dismiss) private var dismiss
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      Text("Terminal apps").font(.headline)
+      Text("Copies from these apps count as coming from a terminal (the “From terminal” condition).")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+
+      List {
+        if bundleIDs.isEmpty {
+          Text("No terminal apps configured.").foregroundStyle(.secondary)
+        }
+        ForEach(bundleIDs, id: \.self) { bundleID in
+          HStack {
+            Text(ActionConfig.appName(for: bundleID))
+            Spacer()
+            Button(action: { bundleIDs.removeAll { $0 == bundleID } }) {
+              Image(systemName: "trash")
+            }
+            .buttonStyle(.borderless)
+          }
+        }
+      }
+      .frame(height: 220)
+
+      HStack {
+        Button {
+          if let id = AppPicker.choose(), !bundleIDs.contains(id) {
+            bundleIDs.append(id)
+          }
+        } label: {
+          Label("Add…", systemImage: "plus")
+        }
+        Button("Reset to defaults") { bundleIDs = TerminalApps.defaults }
+        Spacer()
+        Button("Done") { dismiss() }
+          .keyboardShortcut(.defaultAction)
+      }
+    }
+    .padding(20)
+    .frame(width: 420)
   }
 }
 
