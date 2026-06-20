@@ -69,9 +69,11 @@ All output is pretty JSON on stdout. Errors go to stderr with a non-zero exit;
 ```
 
 `<input>` for `add` / `update` / `import` is one of:
-- `--json '<json>'`
-- `--file <path>`
+- `--json '<json>'`  (preferred for agents)
 - piped **stdin** (when neither flag is given)
+- `--file <path>`  — the app is **sandboxed**, so the path must be readable by the
+  app's sandbox (e.g. inside its container or an allowed location like `~/Downloads`).
+  Arbitrary `/tmp` paths fail with a permission error; prefer `--json` or stdin.
 
 `add`/`update` take a single rule **object**; `import` takes a rule **array**.
 
@@ -171,11 +173,11 @@ echo '{
 ```
 
 ### Bind a shortcut to one action (without changing matching)
-Fetch the rule, set the action's `shortcut`, update it:
+Fetch the rule, set the action's `shortcut`, pipe it back via stdin (sandbox-safe):
 ```bash
-"$BIN" rules get <id> > /tmp/rule.json
-#  …edit /tmp/rule.json: add "shortcut":"ctrl+opt+u" to the target action…
-"$BIN" rules update <id> --file /tmp/rule.json
+"$BIN" rules get <id> \
+  | python3 -c 'import sys,json; r=json.load(sys.stdin); r["actions"][0]["shortcut"]="cmd+shift+u"; sys.stdout.write(json.dumps(r))' \
+  | "$BIN" rules update <id>
 ```
 
 ### Manage terminal apps (what `terminalSource` matches)
