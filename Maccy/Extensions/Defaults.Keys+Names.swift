@@ -63,4 +63,5 @@ extension Defaults.Keys {
   // MARK: - Plugin system (Milestone C)
   static let installedMarketplaces   = Key<[String]>("installedMarketplaces", default: [])
   static let localMarketplaceFolders = Key<[String]>("localMarketplaceFolders", default: [])
+  static let pluginCapabilityGrants  = Key<[String: [Capability]]>("pluginCapabilityGrants", default: [:])
 }
