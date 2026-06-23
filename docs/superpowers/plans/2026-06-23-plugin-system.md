@@ -21,6 +21,7 @@ Every task's requirements implicitly include this section. Values copied verbati
   (XcodeBuildMCP `test_macos` is an equivalent alternative; load its schema via `ToolSearch select:mcp__XcodeBuildMCP__test_macos` first.)
 - **Test framework:** XCTest only. Every test file: `import XCTest` + `@testable import Maccy`. Class `final class <Name>Tests: XCTestCase`; methods `func test<What>()`; `XCTAssertEqual`/`XCTAssertTrue`. No Swift Testing.
 - **pbxproj registration (NOT a synchronized group — every new `.swift` needs 4 manual edits):** for a file under `Maccy/Plugins/`, follow the existing `Maccy/Actions/` precedent — files sit **flat in the `Maccy` group** with the subfolder encoded in the `path` field; there is no nested group. Generate two 24-hex UUIDs per file (`uuidgen | tr -d '-' | head -c 24 | tr '[:lower:]' '[:upper:]'`). Add: (1) `PBXBuildFile` `<bf> /* X.swift in Sources */ = {isa = PBXBuildFile; fileRef = <fr> /* X.swift */; };`; (2) `PBXFileReference` `<fr> /* X.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Plugins/X.swift; sourceTree = "<group>"; };`; (3) `<fr>` into the `DAEE38451E3DBEB100DD2966 /* Maccy */` group `children`; (4) `<bf>` into `DAEE383F1E3DBEB100DD2966 /* Sources */` `files`. Test files use `path = MaccyTests/X.swift`-style refs added to the MaccyTests group + `DA360DAC1E3DF137005C6F6B` build phase. A `.swift` file not in pbxproj is silently NOT compiled.
+- **AUTHORITATIVE (pbxproj groups) — overrides any per-task wording:** there is NO nested `Plugins` PBXGroup at any point in this plan. EVERY `Maccy/Plugins/*.swift` file, in EVERY task (A1–C4), is registered **flat** in `DAEE38451E3DBEB100DD2966 /* Maccy */` with `path = Plugins/<File>.swift`. Wherever a task says a `Plugins` group “was created in A1”/“by B1–B4” or uses a bare `path = <File>.swift` for a `Plugins/` file, IGNORE it — use `path = Plugins/<File>.swift` and add the fileRef to the `Maccy` group. (Test files are the only exception: they sit in the MaccyTests group with `path = <File>.swift`.)
 - **Defaults keys:** declare as `static let foo = Key<T>("foo", default: …)` in `extension Defaults.Keys` (file `Maccy/Extensions/Defaults.Keys+Names.swift`), `T: Defaults.Serializable`. Read `Defaults[.foo]`, write `Defaults[.foo] = v`.
 - **Entitlements** (`Maccy/Maccy.entitlements`) already include `com.apple.security.app-sandbox=true`, `com.apple.security.network.client=true`, `com.apple.security.cs.disable-library-validation=true`, `com.apple.security.files.user-selected.read-only=true`. **No new entitlement is needed** — JavaScriptCore needs none; network.client already present.
 - **Bundle id / container:** `com.royp.MaccayActions`.
@@ -38,6 +39,16 @@ These bound v1 so it ships safely and fully delivers "anyone can add conditions/
 4. **The `maccay-plugins` GitHub repo (net-new repo + first push) is gated** on explicit owner approval (Milestone D) per repo-creation rules.
 5. **Migration is a hard cut via a new Defaults key.** The rule store moves from key `"actionRules"` to `"actionRulesV3"` with new-shape presets; old data is abandoned (no users). No back-compat decoder.
 
+## Known v1 limitations (deferred by design — not gaps)
+
+The plan deliberately does NOT implement these in v1; they are listed so they are not mistaken for omissions:
+- **Capability bridges are not executable in v1** (scope decision #3): network/FS capabilities are declared, consented, and badged, but the bridge-less JS runtime cannot yet perform network/FS. A declared capability is surfaced and consented, not functional.
+- **Marketplace refresh niceties (C1/C2):** v1 fetches `marketplace.json` directly. Web→`raw.githubusercontent.com` URL rewrite, ETag/`If-None-Match`/304 caching, the 24h refresh cadence + ⌘R wiring, and a persisted offline index are deferred to v1.x; refresh re-fetches unconditionally.
+- **Integrity = `plugin.json` sha256 (C1):** v1 is NO-UNZIP (per-file fetch) and verifies the `plugin.json` bytes against the entry `sha256`. Full plugin-tree hashing and a signed revocation list are deferred.
+- **Install atomicity (C1):** v1 writes into `dir/<id>/`; the “keep old version until new validates” swap + rollback is deferred to v1.x.
+- **JS watchdog `.timedOut` (B3):** maps the JSC termination exception by message substring; a callback-flag approach is the v1.x hardening.
+- **Trojan-update re-consent (C3):** v1 re-prompts when a plugin declares a NEW capability; an explicit capability-diff + `revokeAll`-on-version-change step is deferred.
+
 ## File structure
 
 **New (`Maccy/Plugins/`):**
@@ -51,7 +62,7 @@ These bound v1 so it ships safely and fully delivers "anyone can add conditions/
 - `PluginLoader.swift` — scans bundled dir + Application Support + local-folder marketplaces, parses manifests, builds providers via the engines, registers them; called at boot and on reload.
 - `Marketplace.swift` — `struct Marketplace`/`MarketplaceEntry`/`PluginSource` Codable models + `MarketplaceResolver` (download + `sha256` verify + extract).
 - `MarketplaceStore.swift` — `@MainActor final class MarketplaceStore`: registered marketplaces (Defaults), refresh, install/update/remove, local-folder marketplaces, atomic update.
-- `CapabilityManager.swift` — `@MainActor final class CapabilityManager`: persisted grants, `needsConsent(for:)`, `record(grant:)`, source-trust helpers.
+- `CapabilityManager.swift` — `@MainActor final class CapabilityManager`: persisted grants, `needsConsent(pluginID:declared:)`, `grant(_:pluginID:)`, source-trust helpers.
 
 **New (`Maccy/Settings/`):**
 - `PluginsSettingsPane.swift` — marketplace browse/refresh/install/remove, add marketplace URL, add local folders, capability consent sheet, unverified badge.
@@ -253,7 +264,7 @@ enum JSPluginError: Error, Equatable { case compileFailed(String), missingEntry(
 `Marketplace.swift`:
 ```swift
 struct Marketplace: Codable, Hashable, Identifiable { let id: String; let name: String; let version: String; let description: String?; let maintainer: String?; let plugins: [MarketplaceEntry] }
-struct MarketplaceEntry: Codable, Hashable, Identifiable { let id: String; let name: String; let description: String; let version: String; let minAppVersion: String?; let kind: ProviderKind; let tags: [String]?; let source: PluginSource; let sha256: String }
+struct MarketplaceEntry: Codable, Hashable, Identifiable { let id: String; let name: String; let description: String; let version: String; let minAppVersion: String?; let kind: ProviderKind; let tags: [String]?; let capabilities: [Capability]?; let source: PluginSource; let sha256: String }
 enum PluginSource: Codable, Hashable { case github(repo: String, ref: String, path: String?), url(String) }
 enum MarketplaceError: Error, Equatable { case badIndex, checksumMismatch, unsupportedSource, httpError(Int) }
 @MainActor enum MarketplaceResolver {
@@ -827,7 +838,7 @@ struct ProviderDescriptor: Identifiable, Hashable {
   				39319FD858DF488DB233958E /* PluginCore.swift in Sources */,
   ```
 
-  > **Note:** `Maccy/Plugins/` is a new subfolder. The plan specifies (Global Constraints) that for a file under `Maccy/Plugins/` the subfolder is encoded in the `path` field of the PBXFileReference (`path = Plugins/PluginCore.swift`), and the file is placed **flat in the `DAEE38451E3DBEB100DD2966 /* Maccy */` group** — no new nested PBXGroup is required for a single file. If later tasks add more Plugins/ files, a nested group can be added at that point, but for A1 the flat pattern (matching Actions/) is correct and sufficient.
+  > **Note:** `Maccy/Plugins/` is a new subfolder. The plan specifies (Global Constraints) that for a file under `Maccy/Plugins/` the subfolder is encoded in the `path` field of the PBXFileReference (`path = Plugins/PluginCore.swift`), and the file is placed **flat in the `DAEE38451E3DBEB100DD2966 /* Maccy */` group** — no new nested PBXGroup is required for a single file. All later `Plugins/` files use this same flat pattern (subfolder in `path`, fileRef in the `Maccy` group) — no nested `Plugins` group is ever created.
 
 - [ ] **Step 6: Run tests — expect PASS**
 
@@ -869,7 +880,7 @@ struct ProviderDescriptor: Identifiable, Hashable {
 
 **Files:**
 - Create: `Maccy/Plugins/ProviderRegistry.swift`
-- Create: `MaccayTests/ProviderRegistryTests.swift`
+- Create: `MaccyTests/ProviderRegistryTests.swift`
 - Modify: `Maccy.xcodeproj/project.pbxproj` (4 entries for each new file)
 
 ---
@@ -903,7 +914,7 @@ enum ProviderSource: Codable, Hashable { case builtin, bundled; case marketplace
 
 - [ ] **Step 1: Write the failing test**
 
-  Create `MaccayTests/ProviderRegistryTests.swift` with the full test suite. All tests will fail because `ProviderRegistry` does not exist yet.
+  Create `MaccyTests/ProviderRegistryTests.swift` with the full test suite. All tests will fail because `ProviderRegistry` does not exist yet.
 
   ```swift
   import XCTest
@@ -1032,7 +1043,17 @@ enum ProviderSource: Codable, Hashable { case builtin, bundled; case marketplace
 
 - [ ] **Step 2: Register `ProviderRegistryTests.swift` in pbxproj**
 
-  Generate two UUIDs and make 4 edits to the test target (MaccyTests group + `DA360DAC1E3DF137005C6F6B` build phase).
+  Generate two UUIDs (`<TFR>`, `<TBF>`) and make 4 edits:
+  ```
+  # (1) PBXBuildFile section:
+  <TBF> /* ProviderRegistryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = <TFR> /* ProviderRegistryTests.swift */; };
+  # (2) PBXFileReference section (test files sit in the MaccyTests group → path is the filename only):
+  <TFR> /* ProviderRegistryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderRegistryTests.swift; sourceTree = "<group>"; };
+  # (3) add into the MaccyTests PBXGroup (path = MaccyTests;) children:
+  <TFR> /* ProviderRegistryTests.swift */,
+  # (4) add into the DA360DAC1E3DF137005C6F6B /* Sources */ (MaccyTests) build phase files:
+  <TBF> /* ProviderRegistryTests.swift in Sources */,
+  ```
 
 - [ ] **Step 3: Run the test — expect FAIL**
 
@@ -1078,6 +1099,18 @@ enum ProviderSource: Codable, Hashable { case builtin, bundled; case marketplace
 
 - [ ] **Step 5: Register `ProviderRegistry.swift` in pbxproj (app target) — 4 entries**
 
+  Generate two UUIDs (`<AFR>`, `<ABF>`) and make 4 edits (flat layout, per Global Constraints):
+  ```
+  # (1) PBXBuildFile section:
+  <ABF> /* ProviderRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = <AFR> /* ProviderRegistry.swift */; };
+  # (2) PBXFileReference section:
+  <AFR> /* ProviderRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Plugins/ProviderRegistry.swift; sourceTree = "<group>"; };
+  # (3) add into the DAEE38451E3DBEB100DD2966 /* Maccy */ group children:
+  <AFR> /* ProviderRegistry.swift */,
+  # (4) add into the DAEE383F1E3DBEB100DD2966 /* Sources */ build phase files:
+  <ABF> /* ProviderRegistry.swift in Sources */,
+  ```
+
 - [ ] **Step 6: Run the test — expect PASS**
 
 - [ ] **Step 7: Run the full unit test suite — expect no regressions**
@@ -1085,7 +1118,7 @@ enum ProviderSource: Codable, Hashable { case builtin, bundled; case marketplace
 - [ ] **Step 8: Commit**
 
   ```sh
-  git add Maccy/Plugins/ProviderRegistry.swift MaccayTests/ProviderRegistryTests.swift Maccy.xcodeproj/project.pbxproj
+  git add Maccy/Plugins/ProviderRegistry.swift MaccyTests/ProviderRegistryTests.swift Maccy.xcodeproj/project.pbxproj
   git commit -m "feat(registry): add ProviderRegistry with register/lookup/descriptors/removeAll/reset"
   ```
 
@@ -1097,7 +1130,7 @@ enum ProviderSource: Codable, Hashable { case builtin, bundled; case marketplace
 
 **What this task does:** Creates `Maccy/Plugins/BuiltinProviders.swift` (new file, additive — does NOT change any existing file). Registers eight native providers into `ProviderRegistry`: four condition providers (`builtin.kind`, `builtin.regex`, `builtin.contains`, `builtin.sourceApp`) and four action providers (`builtin.openURL`, `builtin.openInApp`, `builtin.webSearch`, `builtin.runShortcut`). The logic is ported verbatim from the concrete `ClipboardAction` conformers in `ClipboardAction.swift`, which remain untouched until A5. The global `makeURL(from:)` and `ActionError` in `ClipboardAction.swift` are referenced directly — they survive until A5.
 
-**Pre-condition:** A1 (PluginCore.swift) and A2 (ProviderRegistry.swift) are committed. The `Maccy/Plugins/` group must exist in `project.pbxproj`; if it was created during A1/A2 registration, only the file-level entries below are needed.
+**Pre-condition:** A1 (PluginCore.swift) and A2 (ProviderRegistry.swift) are committed. Per Global Constraints there is no nested `Plugins` group — register `BuiltinProviders.swift` flat in the `Maccy` group with `path = Plugins/BuiltinProviders.swift` (4-entry recipe).
 
 ---
 
@@ -2068,7 +2101,7 @@ enum ProviderSource: Codable, Hashable { case builtin, bundled; case marketplace
   ClipboardAction.swift until the A5 swap. Includes BuiltinProvidersTests
   covering descriptor shape, evaluate/run correctness, and edge cases.
 
-  Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+  Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
   EOF
   )"
   ```
@@ -2084,7 +2117,7 @@ enum ProviderSource: Codable, Hashable { case builtin, bundled; case marketplace
 
 - [ ] **Step 1: Write the failing test file — `MaccyTests/FirstPartyProvidersTests.swift`**
 
-  Create `MaccayTests/FirstPartyProvidersTests.swift` with the full content below. It will not compile yet because `FirstPartyProviders` does not exist. That is expected and intentional for TDD.
+  Create `MaccyTests/FirstPartyProvidersTests.swift` with the full content below. It will not compile yet because `FirstPartyProviders` does not exist. That is expected and intentional for TDD.
 
   ```swift
   import XCTest
@@ -2614,7 +2647,7 @@ enum ProviderSource: Codable, Hashable { case builtin, bundled; case marketplace
 
 - [ ] **Step 5: Register `FirstPartyProviders.swift` in `project.pbxproj` (app target)**
 
-  The `Plugins/` group in `project.pbxproj` was created in Task A1 (when `PluginCore.swift` was first added). This step adds only the file entries for `FirstPartyProviders.swift` into that existing group.
+  Per Global Constraints (AUTHORITATIVE), there is no nested `Plugins` group. `FirstPartyProviders.swift` is registered **flat** in the `DAEE38451E3DBEB100DD2966 /* Maccy */` group with `path = Plugins/FirstPartyProviders.swift`.
 
   Generated UUIDs for this file:
   - `fileRef_UUID` = `529599662554485689514F14`
@@ -2629,12 +2662,12 @@ enum ProviderSource: Codable, Hashable { case builtin, bundled; case marketplace
 
   **Edit 2 — add a `PBXFileReference` entry** in the `/* Begin PBXFileReference section */` block:
   ```
-  529599662554485689514F14 /* FirstPartyProviders.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirstPartyProviders.swift; sourceTree = "<group>"; };
+  529599662554485689514F14 /* FirstPartyProviders.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Plugins/FirstPartyProviders.swift; sourceTree = "<group>"; };
   ```
 
-  > Note: Because `FirstPartyProviders.swift` lives inside the `Plugins/` PBXGroup (which has `path = Plugins`), the `PBXFileReference.path` is just the filename — not `Plugins/FirstPartyProviders.swift`. The group's own `path` field supplies the `Plugins/` segment. This matches the pattern documented in the Global Constraints "Adding a brand-new group" note (§c).
+  > Note: per Global Constraints there is no nested `Plugins` group — the `PBXFileReference.path` carries the subfolder (`path = Plugins/FirstPartyProviders.swift`) and the fileRef goes into the flat `Maccy` group, matching the `Actions/` precedent.
 
-  **Edit 3 — add the `fileRef_UUID` into the `Plugins` PBXGroup `children` array** (the group with `path = Plugins;`, created in A1):
+  **Edit 3 — add the `fileRef_UUID` into the `DAEE38451E3DBEB100DD2966 /* Maccy */` group `children` array** (flat, per Global Constraints):
   ```
   529599662554485689514F14 /* FirstPartyProviders.swift */,
   ```
@@ -2690,7 +2723,7 @@ enum ProviderSource: Codable, Hashable { case builtin, bundled; case marketplace
   Defaults[.terminalAppBundleIDs]. registerFirstParty(into:) wires all eight providers.
   Additive — existing TransformKind/RuleCondition enums are not touched (removed in A5).
 
-  Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+  Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
   Claude-Session: https://claude.ai/code/session_01Tkhip6qSb9uiFxwiJQbcKX
   EOF
   )"
@@ -2703,7 +2736,7 @@ enum ProviderSource: Codable, Hashable { case builtin, bundled; case marketplace
 
 > **THE ATOMIC SWAP.** A1–A4 are merged and compile alongside the old enums. This task deletes the old enums/switches and rewires schema + engine + CLI + GUI together; they reference each other's symbols, so the project does NOT compile until Part 5 lands. Exactly ONE build+test checkpoint, at the end of Part 5. Do the parts in order; commit once at the very end.
 
-**Files:** Modify `Maccy/Actions/ActionRule.swift`, `Maccy/Actions/ClipboardAction.swift`, `Maccy/Actions/ActionEngine.swift`, `Maccy/Actions/ActionsCLI.swift`, `Maccy/Settings/ActionsSettingsPane.swift`; Create `MaccyTests/ActionEngineRegistryTests.swift`; Modify `Maccy.xcodeproj/project.pbxproj`.
+**Files:** Modify `Maccy/Actions/ActionRule.swift`, `Maccy/Actions/ClipboardAction.swift`, `Maccy/Actions/ActionEngine.swift`, `Maccy/Actions/ActionsCLI.swift`, `Maccy/Settings/ActionsSettingsPane.swift`; Create `MaccyTests/ActionEngineRegistryTests.swift`; Modify `MaccyTests/KeyboardLayoutTests.swift` (one test references the deleted `TransformKind`); Modify `Maccy.xcodeproj/project.pbxproj`.
 
 
 #### Part 0 — Test scaffold
@@ -2840,6 +2873,7 @@ enum ProviderSource: Codable, Hashable { case builtin, bundled; case marketplace
   Replace the entire file `/Users/roypadina/Code/Padina/Maccay/Maccy/Actions/ActionRule.swift` with the following complete content. `ValueKind` is defined in `ValueKind.swift` and is not restated. `MatchMode` is kept verbatim. `WebSearchTemplate` is kept. `ActionType` and `TransformKind` are deleted (their logic moves to `BuiltinProviders`/`FirstPartyProviders`).
 
   ```swift
+  import AppKit
   import Defaults
   import Foundation
 
@@ -2865,6 +2899,15 @@ enum ProviderSource: Codable, Hashable { case builtin, bundled; case marketplace
     var provider: String                 // e.g. "builtin.openURL", "com.maccay.unwrap"
     var params: JSONValue = .object([:])
     var shortcut: String?                // per-action keyboard shortcut, e.g. "cmd+shift+u"
+
+    // Display name for a bundle id. Retained from the pre-swap ActionConfig
+    // because the GUI (TerminalAppsEditor / app picker, Part 5) still calls it.
+    static func appName(for bundleID: String) -> String {
+      if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
+        return url.deletingPathExtension().lastPathComponent
+      }
+      return bundleID
+    }
   }
 
   // A user-defined rule: when its conditions match, its (ordered) actions become
@@ -2896,7 +2939,7 @@ enum ProviderSource: Codable, Hashable { case builtin, bundled; case marketplace
           ),
           ActionConfig(
             provider: "builtin.webSearch",
-            params: .object(["searchTemplate": .string(WebSearchTemplate.google)])
+            params: .object(["template": .string(WebSearchTemplate.google)])
           )
         ]
       ),
@@ -2930,7 +2973,7 @@ enum ProviderSource: Codable, Hashable { case builtin, bundled; case marketplace
         actions: [
           ActionConfig(
             provider: "builtin.webSearch",
-            params: .object(["searchTemplate": .string(WebSearchTemplate.google)])
+            params: .object(["template": .string(WebSearchTemplate.google)])
           )
         ]
       ),
@@ -3612,7 +3655,31 @@ End-of-part summary for the integrator. After A5b the full `ActionEngine.swift` 
 
   > **Why `normalizedRule(from:forcingID:)` and `jsonObject(of:)` are unchanged.** `normalizedRule` only manipulates the top-level `id` key and delegates to `decodeRule`; it has no knowledge of the action shape, so it needs no edit. `jsonObject(of:)` is a generic `Encodable` → `[String:Any]` round-trip and is schema-agnostic. The `"id"`-drop-on-`forcingID` behavior (line 296, used by `update`) still works because `id` is still a top-level key of the new `ActionRule`.
   >
-  > **Note on `validate(_:)` (out of scope for this part, flagged for the rest of A5).** The pre-swap `validate(_:)` (lines 355–389) switches over the deleted `ActionType` enum and pattern-matches the deleted `RuleCondition` cases (`if case .regex(let pattern) = condition`). It will not compile against the new schema and **must be rewritten as part of the A5 swap** (it should validate `action.shortcut` parsing via `ShortcutSpec.parse`, confirm `action.provider`/`condition.provider` resolve in `ProviderRegistry.shared`, and drop the old per-`ActionType` required-field checks in favor of `ParamSpec`-driven checks). That rewrite belongs to the `ActionRule`/engine slice of A5, not to this CLI part; it is called out here only so the build at Part 5 is not surprised by it.
+  > **Note on `validate(_:)` (out of scope for this part, flagged for the rest of A5).** The pre-swap `validate(_:)` (lines 355–389) switches over the deleted `ActionType` enum and pattern-matches the deleted `RuleCondition` cases (`if case .regex(let pattern) = condition`). It will not compile against the new schema and **must be rewritten as part of the A5 swap** (it should validate `action.shortcut` parsing via `ShortcutSpec.parse`, confirm `action.provider`/`condition.provider` resolve in `ProviderRegistry.shared`, and drop the old per-`ActionType` required-field checks in favor of `ParamSpec`-driven checks). It is rewritten in **Step 4.4** below so the Part 5 build has the code to apply.
+
+- [ ] **Step 4.4: Rewrite `validate(_:)` for the new schema (replaces the pre-swap version, ActionsCLI.swift ~355–389).**
+  The old `validate(_:)` switches over the deleted `ActionType` and pattern-matches deleted `RuleCondition` cases, so it will not compile. Providers are registered at CLI start (Step 4.1), so registry lookups are populated. Replace the whole function with:
+
+  ```swift
+  // Validates a rule before any write: provider ids must resolve in the registry,
+  // and any per-action shortcut must parse. ParamSpec-level checks are the
+  // provider's concern at run time, so no per-type required-field checks remain.
+  private static func validate(_ rule: ActionRule) throws {
+    for condition in rule.conditions {
+      guard ProviderRegistry.shared.condition(condition.provider) != nil else {
+        throw CLIError("Invalid rule: unknown condition provider \"\(condition.provider)\"")
+      }
+    }
+    for action in rule.actions {
+      guard ProviderRegistry.shared.action(action.provider) != nil else {
+        throw CLIError("Invalid rule: unknown action provider \"\(action.provider)\"")
+      }
+      if let spec = action.shortcut, ShortcutSpec.parse(spec) == nil {
+        throw CLIError("Invalid rule: unparseable shortcut \"\(spec)\"")
+      }
+    }
+  }
+  ```
 
 Relevant file (single source touched by this part): `/Users/roypadina/Code/Padina/Maccay/Maccy/Actions/ActionsCLI.swift`. No standalone build/test/commit in Part 4 — the combined A5 checkpoint runs at Part 5 with `xcodebuild test -project /Users/roypadina/Code/Padina/Maccay/Maccy.xcodeproj -scheme Maccy -destination 'platform=macOS' -only-testing:MaccyTests`.
 
@@ -4124,7 +4191,7 @@ Relevant file (single source touched by this part): `/Users/roypadina/Code/Padin
     var body: some View {
       VStack(alignment: .leading, spacing: 12) {
         Text("Terminal apps").font(.headline)
-        Text("Copies from these apps count as coming from a terminal (the "From terminal" condition).")
+        Text("Copies from these apps count as coming from a terminal (the “From terminal” condition).")
           .font(.caption)
           .foregroundStyle(.secondary)
 
@@ -4187,10 +4254,27 @@ Relevant file (single source touched by this part): `/Users/roypadina/Code/Padin
   ```
 
   > Notes the engineer must honor while pasting:
-  > - `ActionConfig.appName(for:)` is referenced by `TerminalAppsEditor` and is expected to still exist on the new `ActionConfig` (A5a kept it as a static display helper); if A5a moved it, update that one call site only.
+  > - `ActionConfig.appName(for:)` is referenced by `TerminalAppsEditor`. A5a (Part 1) retains it as a static display helper on the new `ActionConfig` and adds `import AppKit` for `NSWorkspace` — so this call site compiles unchanged.
   > - `ProviderRegistry.shared.descriptors(kind:)` is `@MainActor`; `ConditionRow`/`ActionRow`/`ActionsSettingsPane` are SwiftUI `View`s (already main-actor-isolated in this codebase), so the `.shared` access compiles without extra annotation.
   > - The `.onChange(of:) { _, _ in }` two-parameter closure is the current-macOS signature already used elsewhere in this project; if the project's deployment target predates it, switch to the single-parameter `.onChange(of:) { _ in }` form — do not change anything else.
   > - `paramEditor`/`stringParam`/`valueKindParam` are intentionally duplicated in both `ConditionRow` and `ActionRow` (separate `View` types bound to different `params` keypaths). Keeping them identical is deliberate; do not try to share via a protocol in this part.
+
+- [ ] **Step 2b: Fix the pre-existing `MaccyTests/KeyboardLayoutTests.swift` (it references the deleted `TransformKind`).**
+  The shipping `testTransformKindRegistered` asserts `TransformKind.allCases.contains(.fixKeyboardLayout)` and `TransformKind.fixKeyboardLayout.label`. `TransformKind` is deleted by A5 Part 1, so the `MaccyTests` target will not compile at the checkpoint below. Replace ONLY that test method (leave `testEnglishKeystrokesToHebrew` untouched) with a registry-based check:
+
+  ```swift
+  // Was: asserted TransformKind.allCases — the layout fixer is now a registry provider.
+  @MainActor
+  func testFixKeyboardLayoutProviderRegistered() {
+    ProviderRegistry.shared.reset()
+    BuiltinProviders.registerBuiltins(into: .shared)
+    FirstPartyProviders.registerFirstParty(into: .shared)
+    let provider = ProviderRegistry.shared.action("com.maccay.fix-keyboard-layout")
+    XCTAssertNotNil(provider)
+    XCTAssertEqual(provider?.descriptor.id, "com.maccay.fix-keyboard-layout")
+  }
+  ```
+  No pbxproj change (`KeyboardLayoutTests.swift` is already registered in the test target).
 
 - [ ] **Step 3: Build + run the FULL unit-test suite (GREEN checkpoint for the entire atomic swap).**
   This is the single verification gate for Task A5. Run the exact command from Global Constraints:
@@ -6022,9 +6106,9 @@ Notes for the implementing engineer (verified facts, not part of the plan body):
 
 ---
 
-- [ ] **Step 2: Write the failing test `MaccayTests/PluginLoaderTests.swift`**
+- [ ] **Step 2: Write the failing test `MaccyTests/PluginLoaderTests.swift`**
 
-  Create `MaccayTests/PluginLoaderTests.swift` with the content below. It will not compile yet because `PluginLoader` does not exist.
+  Create `MaccyTests/PluginLoaderTests.swift` with the content below. It will not compile yet because `PluginLoader` does not exist.
 
   ```swift
   import XCTest
@@ -6524,226 +6608,34 @@ Notes for the implementing engineer (verified facts, not part of the plan body):
 
 ---
 
-- [ ] **Step 7: Modify `Maccy/Actions/ActionEngine.swift` — call `PluginLoader.loadAll` at startup and on reload**
+- [ ] **Step 7: Wire `PluginLoader.loadAll` into the post-A5 `ActionEngine` (two surgical insertions only)**
 
-  `ActionEngine.swift` is an existing file. Make two targeted additions only — do not change any other line. The full updated file (paste this verbatim, replacing the entire current content):
+  `ActionEngine.swift` was already rewritten by **A5 Part 3** to the registry-based engine (Defaults key `"actionRulesV3"`, registry dispatch via `ProviderRegistry.shared`, a `registerProviders()` helper, and **no** `ClipboardAction`/`ActionFactory`/`resolvedActions`). **Do NOT paste a full `ActionEngine.swift` here** — pasting the pre-A5 file would silently revert the entire atomic swap and fail to compile. Make exactly **two** additions to the existing post-A5 file:
+
+  **7a — startup load.** In the provider-registration path (the `registerProviders()` helper called from `init()`, per A5 Part 3), add the loader as the LAST line, after the two native registrars:
 
   ```swift
-  import AppKit
-  import Defaults
-  import Foundation
-  import KeyboardShortcuts
-  import Observation
+  // (existing, from A5 Part 3:)
+  // BuiltinProviders.registerBuiltins(into: .shared)
+  // FirstPartyProviders.registerFirstParty(into: .shared)
 
-  extension Defaults.Keys {
-    static let actionRules = Key<[ActionRule]>("actionRules", default: ActionRule.presets)
-    static let terminalAppBundleIDs = Key<[String]>("terminalAppBundleIDs", default: TerminalApps.defaults)
-  }
+  // NEW: load folder plugins (bundled + Application Support).
+  // C2 replaces [] with MarketplaceStore.shared.localFolders().
+  PluginLoader.loadAll(into: .shared, extraFolders: [])
+  ```
 
-  extension KeyboardShortcuts.Name {
-    // No default binding to avoid colliding with other apps; user assigns it.
-    static let runDefaultAction = Self("runDefaultAction")
-  }
+  **7b — reload.** In the existing post-A5 `reloadRules()`, add the same call immediately before `registerShortcuts()` so install/remove from another process takes effect on the distributed-notification reload:
 
-  // Evaluates rules against clipboard items and runs the resulting actions.
-  // Rules are read live from `Defaults` so the settings UI can edit them directly.
-  @MainActor
-  @Observable
-  final class ActionEngine {
-    static let shared = ActionEngine()
-
-    // Last value produced by an auto-run transform, used to swallow the clipboard
-    // poller's echo so auto-run doesn't loop forever.
-    private var lastAutoOutput: String?
-
-    // Per-action shortcut Names we've already wired an onKeyDown handler for.
-    // The handler re-resolves the config by id at fire time, so it survives rule
-    // edits/reloads without re-registering (which would clobber other handlers).
-    private var registeredActionShortcutNames = Set<String>()
-
-    private init() {
-      // Load folder plugins (bundled + Application Support) into the shared
-      // registry at startup.  Note: C2 will replace [] with
-      // MarketplaceStore.shared.localFolders() once that class lands.
-      PluginLoader.loadAll(into: .shared, extraFolders: [])
-    }
-
-    var rules: [ActionRule] { Defaults[.actionRules] }
-
-    // MARK: Matching
-
-    func matchingRules(for item: HistoryItem) -> [ActionRule] {
-      let kinds = ValueClassifier.kinds(of: item)
-      let text = ValueClassifier.primaryString(of: item)
-      let app = item.application
-      return rules.filter { $0.enabled && matches($0, kinds: kinds, text: text, app: app) }
-    }
-
-    private func matches(_ rule: ActionRule, kinds: Set<ValueKind>, text: String, app: String?) -> Bool {
-      guard !rule.conditions.isEmpty else { return false }
-
-      let results = rule.conditions.map { condition -> Bool in
-        switch condition {
-        case .kind(let kind):
-          return kinds.contains(kind)
-        case .sourceApp(let bundle):
-          return app == bundle
-        case .contains(let needle):
-          return !needle.isEmpty && text.localizedCaseInsensitiveContains(needle)
-        case .regex(let pattern):
-          guard !pattern.isEmpty, let regex = try? NSRegularExpression(pattern: pattern) else {
-            return false
-          }
-          let range = NSRange(text.startIndex..., in: text)
-          return regex.firstMatch(in: text, range: range) != nil
-        case .softWrapped:
-          return TextUnwrap.isSoftWrapped(text)
-        case .terminalSource:
-          return app.map { Defaults[.terminalAppBundleIDs].contains($0) } ?? false
-        }
-      }
-
-      return rule.matchMode == .all ? !results.contains(false) : results.contains(true)
-    }
-
-    // MARK: Resolution
-
-    // All runnable actions for an item, in rule order then action order, deduped.
-    // The first element is the default action.
-    func resolvedActions(for item: HistoryItem) -> [ClipboardAction] {
-      var seen = Set<String>()
-      var result: [ClipboardAction] = []
-      for rule in matchingRules(for: item) {
-        for config in rule.actions {
-          guard let action = ActionFactory.make(config), action.canRun(on: item) else { continue }
-          if seen.insert(action.id).inserted {
-            result.append(action)
-          }
-        }
-      }
-      return result
-    }
-
-    func defaultAction(for item: HistoryItem) -> ClipboardAction? {
-      resolvedActions(for: item).first
-    }
-
-    // MARK: Running
-
-    func run(_ action: ClipboardAction, on item: HistoryItem) {
-      Task {
-        do {
-          try await action.run(on: item)
-        } catch {
-          NSSound.beep()
-        }
-      }
-    }
-
-    func runDefault(for item: HistoryItem) {
-      guard let action = defaultAction(for: item) else {
-        NSSound.beep()
-        return
-      }
-      run(action, on: item)
-    }
-
-    // Global-shortcut entry point: run the default action on the most recent item.
-    func runDefaultActionForCurrent() {
-      guard let item = History.shared.unpinnedItems.first?.item ?? History.shared.all.first?.item else {
-        NSSound.beep()
-        return
-      }
-      runDefault(for: item)
-    }
-
-    // MARK: Per-action shortcuts
-
-    // Wire (or rewire) the per-action hotkeys from the current rules. Safe to call
-    // repeatedly: each Name's handler is registered once and re-resolves its config
-    // at fire time, while `setShortcut` is updated to reflect the latest binding.
-    // Never calls `removeAllHandlers()` (that would clobber popup/pin/etc.).
-    func registerShortcuts() {
-      for rule in Defaults[.actionRules] {
-        for config in rule.actions {
-          let name = KeyboardShortcuts.Name("action_\(config.id.uuidString)")
-          if let spec = config.shortcut, let parsed = ShortcutSpec.parse(spec) {
-            KeyboardShortcuts.setShortcut(parsed, for: name)
-          } else {
-            KeyboardShortcuts.setShortcut(nil, for: name)
-          }
-          if registeredActionShortcutNames.insert(name.rawValue).inserted {
-            let actionID = config.id
-            KeyboardShortcuts.onKeyDown(for: name) {
-              ActionEngine.shared.runSpecificActionForCurrent(actionID: actionID)
-            }
-          }
-        }
-      }
-    }
-
-    // Re-read rules from disk after a headless CLI process mutated them, then
-    // rewire shortcuts. `CFPreferencesAppSynchronize` defeats the in-memory
-    // UserDefaults cache so `rules` (computed from `Defaults`) sees the fresh
-    // value on the next copy automatically.
-    func reloadRules() {
-      CFPreferencesAppSynchronize(kCFPreferencesCurrentApplication)
-      // Reload folder plugins so newly installed / removed plugins take effect
-      // when the user changes preferences via another process.
-      // Note: C2 will replace [] with MarketplaceStore.shared.localFolders().
-      PluginLoader.loadAll(into: .shared, extraFolders: [])
-      registerShortcuts()
-    }
-
-    // Per-action-shortcut entry point: run one specific action unconditionally on
-    // the most recent item. No rule matching, no priority, no auto-run gate.
-    func runSpecificActionForCurrent(actionID: UUID) {
-      guard let config = Defaults[.actionRules].flatMap(\.actions).first(where: { $0.id == actionID }),
-            let action = ActionFactory.make(config),
-            let item = History.shared.unpinnedItems.first?.item ?? History.shared.all.first?.item,
-            action.canRun(on: item) else {
-        NSSound.beep()
-        return
-      }
-      run(action, on: item)
-    }
-
-    // MARK: Auto-run (called from Clipboard.onNewCopy)
-
-    func handleNewCopy(_ item: HistoryItem) {
-      // Skip anything Maccy itself put on the clipboard (e.g. selecting an item to
-      // paste it). Without this, pasting a URL would auto-open it and steal focus
-      // from the paste target instead of pasting.
-      guard !item.fromMaccy else { return }
-
-      let text = ValueClassifier.primaryString(of: item)
-
-      // Swallow the echo of a value we just produced via an auto transform
-      // (Clipboard.copy(string) doesn't set the fromMaccy marker).
-      if let last = lastAutoOutput, last == text {
-        lastAutoOutput = nil
-        return
-      }
-
-      for rule in matchingRules(for: item) where rule.autoRunDefault {
-        guard let config = rule.actions.first,
-              let action = ActionFactory.make(config),
-              action.canRun(on: item) else { continue }
-        run(action, on: item)
-        break // only the first matching auto-run rule
-      }
-    }
-
-    func noteAutoOutput(_ value: String) {
-      lastAutoOutput = value
-    }
+  ```swift
+  func reloadRules() {
+    CFPreferencesAppSynchronize(kCFPreferencesCurrentApplication)
+    // NEW: reload folder plugins. C2 replaces [] with MarketplaceStore.shared.localFolders().
+    PluginLoader.loadAll(into: .shared, extraFolders: [])
+    registerShortcuts()
   }
   ```
 
-  > **Diff summary** (for review): Exactly two changes vs. the original file:
-  > 1. `private init() {}` expanded to call `PluginLoader.loadAll(into: .shared, extraFolders: [])`.
-  > 2. `reloadRules()` gains `PluginLoader.loadAll(into: .shared, extraFolders: [])` before `registerShortcuts()`, plus a comment naming the C2 follow-up.
-  > Every other line is byte-for-byte identical to the original.
+  No other line of `ActionEngine.swift` changes. No pbxproj edit (existing file). Confirm afterward: `grep -n "PluginLoader.loadAll" Maccy/Actions/ActionEngine.swift` shows exactly the two calls above and the file still contains `"actionRulesV3"` and `ProviderRegistry.shared` (i.e. the A5 swap is intact).
 
 ---
 
@@ -6785,7 +6677,7 @@ Notes for the implementing engineer (verified facts, not part of the plan body):
   git add \
     Maccy/Plugins/PluginLoader.swift \
     Maccy/Actions/ActionEngine.swift \
-    MaccayTests/PluginLoaderTests.swift \
+    MaccyTests/PluginLoaderTests.swift \
     Maccy.xcodeproj/project.pbxproj
 
   git commit -m "$(cat <<'EOF'
@@ -6799,7 +6691,7 @@ Notes for the implementing engineer (verified facts, not part of the plan body):
   active at boot and refreshed on CLI-triggered reloads.  The extraFolders
   parameter is [] for now; C2 will pass MarketplaceStore.shared.localFolders().
 
-  Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+  Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
   EOF
   )"
   ```
@@ -6884,7 +6776,7 @@ Notes for the implementing engineer (verified facts, not part of the plan body):
 
   The test locates `BundledPlugins/` relative to `#filePath` (source-tree path, always valid on disk during a local build), loads both plugins via `PluginLoader`, and asserts their behaviour.
 
-  > `#filePath` in `MaccayTests/BundledPluginsTests.swift` resolves to `.../Maccay/MaccayTests/BundledPluginsTests.swift`. Go up one level → `MaccayTests/`, up one more → `Maccay/` (repo root), then `Maccy/Resources/BundledPlugins/`.
+  > `#filePath` in `MaccyTests/BundledPluginsTests.swift` resolves to `.../Maccay/MaccyTests/BundledPluginsTests.swift`. Go up one level → `MaccyTests/`, up one more → `Maccay/` (repo root), then `Maccy/Resources/BundledPlugins/`.
 
   Full file content (`MaccyTests/BundledPluginsTests.swift`):
 
@@ -7157,24 +7049,18 @@ Notes for the implementing engineer (verified facts, not part of the plan body):
 
 ---
 
-- [ ] **Step 8: Wire `PluginLoader.loadAll` into the app boot path**
+- [ ] **Step 8: Verify `PluginLoader.loadAll` is already wired into boot (added by B4 Step 7) — do NOT add a second call**
 
-  After tests are green, `PluginLoader.loadAll` must be called at `ActionEngine` startup so bundled plugins are available to the engine from first launch. Add the following line in `ActionEngine.init` (or wherever B4 designates the boot load point), after built-in and first-party providers are registered:
-
-  ```swift
-  // Boot-time plugin load: bundled dir + Application Support/Maccay/Plugins + local folders.
-  // extraFolders will be replaced by MarketplaceStore.shared.localFolders() in Task C2.
-  PluginLoader.loadAll(into: ProviderRegistry.shared, extraFolders: [])
-  ```
-
-  Verify the app compiles:
+  Task B4 Step 7 already added `PluginLoader.loadAll(into: .shared, extraFolders: [])` to `ActionEngine`'s startup path and to `reloadRules()`. Confirm it is present; do NOT add another call and do NOT re-paste `ActionEngine.swift` (that would clobber B4 and the A5 engine).
 
   ```sh
-  xcodebuild build \
-    -project /Users/roypadina/Code/Padina/Maccay/Maccy.xcodeproj \
-    -scheme Maccy \
-    -destination 'platform=macOS' \
-    2>&1 | grep -E "BUILD SUCCEEDED|BUILD FAILED|error:"
+  grep -n "PluginLoader.loadAll" /Users/roypadina/Code/Padina/Maccay/Maccy/Actions/ActionEngine.swift
+  ```
+
+  Expected: the two calls from B4 (startup + `reloadRules`). If absent, complete B4 Step 7 first, then re-run the build:
+
+  ```sh
+  xcodebuild build -project /Users/roypadina/Code/Padina/Maccay/Maccy.xcodeproj -scheme Maccy -destination 'platform=macOS' 2>&1 | grep -E "BUILD SUCCEEDED|BUILD FAILED|error:"
   ```
 
   Expected: `BUILD SUCCEEDED`
@@ -7604,6 +7490,7 @@ Notes for the implementing engineer (verified facts, not part of the plan body):
     let minAppVersion: String?
     let kind: ProviderKind
     let tags: [String]?
+    let capabilities: [Capability]?   // opt-in; nil/[] = pure transform (no net/FS)
     let source: PluginSource
     let sha256: String
   }
@@ -7933,7 +7820,7 @@ Cross-task dependencies the engineer must have landed first: `PluginCore.swift` 
 
 - [ ] **Step 2: Write the failing tests — `MaccyTests/MarketplaceStoreTests.swift`**
 
-  Create `/Users/roypadina/Code/Padina/Maccay/MaccayTests/MarketplaceStoreTests.swift` with the full test class. All tests will fail to compile until Step 4 (the implementation file) is registered in pbxproj and written.
+  Create `/Users/roypadina/Code/Padina/Maccay/MaccyTests/MarketplaceStoreTests.swift` with the full test class. All tests will fail to compile until Step 4 (the implementation file) is registered in pbxproj and written.
 
   ```swift
   import XCTest
@@ -8421,7 +8308,7 @@ Cross-task dependencies the engineer must have landed first: `PluginCore.swift` 
   git -C /Users/roypadina/Code/Padina/Maccay add \
     Maccy/Extensions/Defaults.Keys+Names.swift \
     Maccy/Plugins/MarketplaceStore.swift \
-    MaccayTests/MarketplaceStoreTests.swift \
+    MaccyTests/MarketplaceStoreTests.swift \
     Maccy.xcodeproj/project.pbxproj
   git -C /Users/roypadina/Code/Padina/Maccay commit -m "$(cat <<'EOF'
   Plugin system C2: MarketplaceStore + Defaults keys
@@ -8433,7 +8320,7 @@ Cross-task dependencies the engineer must have landed first: `PluginCore.swift` 
   localMarketplaceFolders Defaults keys. Wires PluginLoader.loadAll to pass
   extraFolders: MarketplaceStore.shared.localFolders(). 11 new unit tests.
 
-  Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+  Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
   EOF
   )"
   ```
@@ -8445,7 +8332,7 @@ Cross-task dependencies the engineer must have landed first: `PluginCore.swift` 
 
 **Goal:** Persisted per-plugin capability grants, consent predicate, revoke, and source-trust helper.
 
-**Assumes done:** Tasks A1–C2 (PluginCore types including `Capability` and `ProviderSource` exist; Defaults.Keys+Names.swift already has `installedMarketplaces` and `localMarketplaceFolders` from C2). The `Maccy/Plugins/` PBXGroup was created in A1.
+**Assumes done:** Tasks A1–C2 (PluginCore types including `Capability` and `ProviderSource` exist; Defaults.Keys+Names.swift already has `installedMarketplaces` and `localMarketplaceFolders` from C2). Per Global Constraints there is no nested `Plugins` PBXGroup; register `CapabilityManager.swift` flat in the `DAEE38451E3DBEB100DD2966 /* Maccy */` group with `path = Plugins/CapabilityManager.swift`.
 
 **Files touched:**
 - `Maccy/Plugins/CapabilityManager.swift` — new file
@@ -9404,7 +9291,11 @@ struct PluginsSettingsPane: View {
   /// capability list; it is read from the already-registered descriptor when present,
   /// otherwise treated as empty (consent will be re-checked at load time).
   private func capabilitiesDeclared(by entry: MarketplaceEntry) -> [Capability] {
-    registry.descriptors().first { $0.id == entry.id }?.capabilities ?? []
+    // Prefer the entry's declared capabilities (known BEFORE install, so the consent
+    // sheet fires pre-download — even for a network/FS plugin from the verified
+    // marketplace). Fall back to the registered descriptor for already-installed plugins.
+    if let caps = entry.capabilities { return caps }
+    return registry.descriptors().first { $0.id == entry.id }?.capabilities ?? []
   }
 }
 
@@ -9413,7 +9304,7 @@ struct PluginsSettingsPane: View {
 }
 ```
 
-> Note for the engineer: `capabilitiesDeclared(by:)` reads the declared capabilities from the registered descriptor. If C1's `MarketplaceEntry` is later extended with an explicit `capabilities: [Capability]?` field, swap this to read `entry.capabilities ?? []` — the `requiresConsent` seam and its tests are unaffected. The current contract `MarketplaceEntry` has no capabilities field, so the descriptor lookup is the available source.
+> Note: `MarketplaceEntry` carries an optional `capabilities: [Capability]?` (added to the C1 model + contract), so consent is computed from the entry BEFORE download/install — the consent sheet therefore fires for a network/FS plugin even when it comes from the verified marketplace. The descriptor lookup is only a fallback for already-installed plugins. The `requiresConsent` seam and its tests are unaffected.
 
 - [ ] **Step C4.6: Register `PluginsSettingsPane.swift` in pbxproj (4 entries, app target).**
 
@@ -9532,7 +9423,7 @@ Files this task touches (all absolute):
 - Modified: `/Users/roypadina/Code/Padina/Maccay/Maccy/Observables/AppState.swift`
 - Modified: `/Users/roypadina/Code/Padina/Maccay/Maccy.xcodeproj/project.pbxproj`
 
-Cross-task dependency notes for the plan author: this task assumes the canonical C2 `MarketplaceStore` surface (`registeredMarketplaceURLs()`, `addMarketplace(_:)`, `install(_:marketplaceID:)`, `remove(pluginID:)`, `localFolders()`, `addLocalFolder(_:)`, `refreshAll()`), the C1 `MarketplaceResolver.fetchIndex(_:)` and `Marketplace`/`MarketplaceEntry`/`PluginSource` models, the C3 `CapabilityManager` (`needsConsent(pluginID:declared:)`, `grant(_:pluginID:)`, `revokeAll(pluginID:)`), the A1 `Capability.consentSentence`/`ProviderSource.isVerified`/`ProviderDescriptor.capabilities`, the A2 `ProviderRegistry.shared.descriptors()`, and the B4 `PluginLoader.loadAll(into:extraFolders:)` — all used verbatim from the Interface Contract. The one place the contract is thin is `MarketplaceEntry` carrying no `capabilities` field; this task reads declared capabilities from the registered descriptor (see the note in Step C4.5). The `requiresConsent` test seam is independent of that detail.
+Cross-task dependency notes for the plan author: this task assumes the canonical C2 `MarketplaceStore` surface (`registeredMarketplaceURLs()`, `addMarketplace(_:)`, `install(_:marketplaceID:)`, `remove(pluginID:)`, `localFolders()`, `addLocalFolder(_:)`, `refreshAll()`), the C1 `MarketplaceResolver.fetchIndex(_:)` and `Marketplace`/`MarketplaceEntry`/`PluginSource` models, the C3 `CapabilityManager` (`needsConsent(pluginID:declared:)`, `grant(_:pluginID:)`, `revokeAll(pluginID:)`), the A1 `Capability.consentSentence`/`ProviderSource.isVerified`/`ProviderDescriptor.capabilities`, the A2 `ProviderRegistry.shared.descriptors()`, and the B4 `PluginLoader.loadAll(into:extraFolders:)` — all used verbatim from the Interface Contract. `MarketplaceEntry` carries an optional `capabilities: [Capability]?` (C1 model + contract); this task computes consent from the entry pre-install, falling back to the registered descriptor for already-installed plugins (see the note in Step C4.5). The `requiresConsent` test seam is independent of that detail.
 
 
 ## Milestone D — Official marketplace repo (GATED on approval)
@@ -10176,7 +10067,7 @@ Cross-task dependency notes for the plan author: this task assumes the canonical
   OWNER placeholder in marketplace.json/CODEOWNERS must be replaced with
   the real username when the repo is approved for creation.
 
-  Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+  Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
   EOF
   )"
   ```
