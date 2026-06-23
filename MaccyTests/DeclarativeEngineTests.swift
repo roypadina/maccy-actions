@@ -122,6 +122,34 @@ final class DeclarativeEngineTests: XCTestCase {
     XCTAssertEqual(outcome, .replace("host.user"))
   }
 
+  @MainActor
+  func testRegexReplaceFlagI() async throws {
+    // With flags:"i" the pattern "hello" matches "HELLO" (case-insensitive).
+    let specWithFlag: JSONValue = .object(["transform": .array([
+      .object([
+        "op": .string("regexReplace"),
+        "pattern": .string("hello"),
+        "flags": .string("i"),
+        "replacement": .string("X")
+      ])
+    ])])
+    let provider = DeclarativeActionProvider(descriptor: actionDescriptor(), spec: specWithFlag)
+    let outcome = try await provider.run(makeInput("HELLO world"), params: .emptyObject)
+    XCTAssertEqual(outcome, .replace("X world"))
+
+    // Without flags the same pattern does NOT match the differently-cased input.
+    let specNoFlag: JSONValue = .object(["transform": .array([
+      .object([
+        "op": .string("regexReplace"),
+        "pattern": .string("hello"),
+        "replacement": .string("X")
+      ])
+    ])])
+    let providerNoFlag = DeclarativeActionProvider(descriptor: actionDescriptor(), spec: specNoFlag)
+    let outcomeNoFlag = try await providerNoFlag.run(makeInput("HELLO world"), params: .emptyObject)
+    XCTAssertEqual(outcomeNoFlag, .replace("HELLO world"))
+  }
+
   // MARK: - Action: op chaining (fold order)
 
   @MainActor

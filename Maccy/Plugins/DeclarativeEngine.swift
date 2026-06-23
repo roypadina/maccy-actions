@@ -32,7 +32,9 @@ struct DeclarativeActionProvider: ActionProvider {
             let replacement = op["replacement"]?.stringValue else {
         throw DeclarativeError.badSpec
       }
-      guard let regex = try? NSRegularExpression(pattern: pattern) else {
+      let flags = op["flags"]?.stringValue ?? ""
+      let options: NSRegularExpression.Options = flags.contains("i") ? [.caseInsensitive] : []
+      guard let regex = try? NSRegularExpression(pattern: pattern, options: options) else {
         throw DeclarativeError.badSpec
       }
       let range = NSRange(text.startIndex..., in: text)
