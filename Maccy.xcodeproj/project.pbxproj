@@ -179,6 +179,8 @@
 		93476DE1F90B450382165729 /* Marketplace.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F501DC15AAC4B789B933AB8 /* Marketplace.swift */; };
 		222FEA966F73421F9F9D1F29 /* PluginLoaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DFF153E47774D76AB45AC87 /* PluginLoaderTests.swift */; };
 		5252F5CC3D734D7C828BBC46 /* BundledPluginsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD12F4C8233345078B12E60F /* BundledPluginsTests.swift */; };
+		7D793CBDB51345F080B6D904 /* MarketplaceStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4A401A9814849FF869A8F44 /* MarketplaceStoreTests.swift */; };
+		E47671948B3C4F488CDA4546 /* MarketplaceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E98CDAFAB3B84795BC147045 /* MarketplaceStore.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -456,6 +458,8 @@
 		CE09118DBFE84F8A913227DA /* JSPluginRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Plugins/JSPluginRuntime.swift; sourceTree = "<group>"; };
 		89511667CC824F8FBA11BE5B /* PluginLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Plugins/PluginLoader.swift; sourceTree = "<group>"; };
 		2F501DC15AAC4B789B933AB8 /* Marketplace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Plugins/Marketplace.swift; sourceTree = "<group>"; };
+		E98CDAFAB3B84795BC147045 /* MarketplaceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Plugins/MarketplaceStore.swift; sourceTree = "<group>"; };
+		F4A401A9814849FF869A8F44 /* MarketplaceStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarketplaceStoreTests.swift; sourceTree = "<group>"; };
 		5DFF153E47774D76AB45AC87 /* PluginLoaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PluginLoaderTests.swift; sourceTree = "<group>"; };
 		DD12F4C8233345078B12E60F /* BundledPluginsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BundledPluginsTests.swift; sourceTree = "<group>"; };
 		0BF249BA3CB847E896F5CB62 /* BundledPlugins */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Resources/BundledPlugins; sourceTree = "<group>"; };
@@ -803,6 +807,7 @@
 				5DFF153E47774D76AB45AC87 /* PluginLoaderTests.swift */,
 				DD12F4C8233345078B12E60F /* BundledPluginsTests.swift */,
 				F662E734665549759A0017AB /* MarketplaceTests.swift */,
+				F4A401A9814849FF869A8F44 /* MarketplaceStoreTests.swift */,
 				DA360DB41E3DF137005C6F6B /* Info.plist */,
 			);
 			path = MaccyTests;
@@ -936,6 +941,7 @@
 				CE09118DBFE84F8A913227DA /* JSPluginRuntime.swift */,
 				89511667CC824F8FBA11BE5B /* PluginLoader.swift */,
 				2F501DC15AAC4B789B933AB8 /* Marketplace.swift */,
+				E98CDAFAB3B84795BC147045 /* MarketplaceStore.swift */,
 				01C1EF123742089F4AFE3304 /* ActionEngine.swift */,
 				1B55E2F80FC91A915D8A2669 /* ActionsSettingsPane.swift */,
 				DA81D673252A056B009977BC /* Throttler.swift */,
@@ -1179,6 +1185,7 @@
 				222FEA966F73421F9F9D1F29 /* PluginLoaderTests.swift in Sources */,
 				5252F5CC3D734D7C828BBC46 /* BundledPluginsTests.swift in Sources */,
 				FB7FBDD86BDE44E4A6CE71FA /* MarketplaceTests.swift in Sources */,
+				7D793CBDB51345F080B6D904 /* MarketplaceStoreTests.swift in Sources */,
 				DA360DB31E3DF137005C6F6B /* HistoryTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1312,6 +1319,7 @@
 				0C07719C05ED4B6A9E4EF21C /* JSPluginRuntime.swift in Sources */,
 				822871D044B1473E81561D14 /* PluginLoader.swift in Sources */,
 				93476DE1F90B450382165729 /* Marketplace.swift in Sources */,
+				E47671948B3C4F488CDA4546 /* MarketplaceStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
