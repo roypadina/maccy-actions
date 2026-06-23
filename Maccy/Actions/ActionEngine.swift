@@ -47,6 +47,9 @@ final class ActionEngine {
     providersRegistered = true
     BuiltinProviders.registerBuiltins(into: .shared)
     FirstPartyProviders.registerFirstParty(into: .shared)
+    // NEW: load folder plugins (bundled + Application Support).
+    // C2 replaces [] with MarketplaceStore.shared.localFolders().
+    PluginLoader.loadAll(into: .shared, extraFolders: [])
   }
 
   var rules: [ActionRule] { Defaults[.actionRules] }
@@ -193,6 +196,8 @@ final class ActionEngine {
   // value on the next copy automatically.
   func reloadRules() {
     CFPreferencesAppSynchronize(kCFPreferencesCurrentApplication)
+    // NEW: reload folder plugins. C2 replaces [] with MarketplaceStore.shared.localFolders().
+    PluginLoader.loadAll(into: .shared, extraFolders: [])
     registerShortcuts()
   }
 

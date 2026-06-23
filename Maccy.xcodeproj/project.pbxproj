@@ -172,6 +172,8 @@
 		0C07719C05ED4B6A9E4EF21C /* JSPluginRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE09118DBFE84F8A913227DA /* JSPluginRuntime.swift */; };
 		0ACD9256CF3449E18F793B8A /* PluginManifestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3F64E658C6846848A1074C7 /* PluginManifestTests.swift */; };
 		EF644DB4D6E543BAB26ED7AB /* DeclarativeEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29F892DE26D74479963E5C1D /* DeclarativeEngineTests.swift */; };
+		822871D044B1473E81561D14 /* PluginLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89511667CC824F8FBA11BE5B /* PluginLoader.swift */; };
+		222FEA966F73421F9F9D1F29 /* PluginLoaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DFF153E47774D76AB45AC87 /* PluginLoaderTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -445,6 +447,8 @@
 		2C84342452A346DFB7FB0DB1 /* PluginManifest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Plugins/PluginManifest.swift; sourceTree = "<group>"; };
 		1F3894DDE2444398A4F91F54 /* DeclarativeEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Plugins/DeclarativeEngine.swift; sourceTree = "<group>"; };
 		CE09118DBFE84F8A913227DA /* JSPluginRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Plugins/JSPluginRuntime.swift; sourceTree = "<group>"; };
+		89511667CC824F8FBA11BE5B /* PluginLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Plugins/PluginLoader.swift; sourceTree = "<group>"; };
+		5DFF153E47774D76AB45AC87 /* PluginLoaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PluginLoaderTests.swift; sourceTree = "<group>"; };
 		E3F64E658C6846848A1074C7 /* PluginManifestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PluginManifestTests.swift; sourceTree = "<group>"; };
 		29F892DE26D74479963E5C1D /* DeclarativeEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeclarativeEngineTests.swift; sourceTree = "<group>"; };
 		DA6D98E12AEABE03008A77CE /* Accessibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Accessibility.swift; sourceTree = "<group>"; };
@@ -786,6 +790,7 @@
 				E3F64E658C6846848A1074C7 /* PluginManifestTests.swift */,
 				29F892DE26D74479963E5C1D /* DeclarativeEngineTests.swift */,
 				16F1601C15344D979FAB63B1 /* JSPluginRuntimeTests.swift */,
+				5DFF153E47774D76AB45AC87 /* PluginLoaderTests.swift */,
 				DA360DB41E3DF137005C6F6B /* Info.plist */,
 			);
 			path = MaccyTests;
@@ -916,6 +921,7 @@
 				2C84342452A346DFB7FB0DB1 /* PluginManifest.swift */,
 				1F3894DDE2444398A4F91F54 /* DeclarativeEngine.swift */,
 				CE09118DBFE84F8A913227DA /* JSPluginRuntime.swift */,
+				89511667CC824F8FBA11BE5B /* PluginLoader.swift */,
 				01C1EF123742089F4AFE3304 /* ActionEngine.swift */,
 				1B55E2F80FC91A915D8A2669 /* ActionsSettingsPane.swift */,
 				DA81D673252A056B009977BC /* Throttler.swift */,
@@ -1153,6 +1159,7 @@
 				0ACD9256CF3449E18F793B8A /* PluginManifestTests.swift in Sources */,
 				EF644DB4D6E543BAB26ED7AB /* DeclarativeEngineTests.swift in Sources */,
 				3D631C6E751644348016503A /* JSPluginRuntimeTests.swift in Sources */,
+				222FEA966F73421F9F9D1F29 /* PluginLoaderTests.swift in Sources */,
 				DA360DB31E3DF137005C6F6B /* HistoryTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1284,6 +1291,7 @@
 				6B429CF442394B1194919BF7 /* PluginManifest.swift in Sources */,
 				0BFBE928043C4291A2BDDFD9 /* DeclarativeEngine.swift in Sources */,
 				0C07719C05ED4B6A9E4EF21C /* JSPluginRuntime.swift in Sources */,
+				822871D044B1473E81561D14 /* PluginLoader.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
