@@ -102,6 +102,7 @@ final class MarketplaceStore {
   func install(_ entry: MarketplaceEntry, marketplaceID: String) async throws {
     let dir = PluginLoader.installedPluginsURL()
     _ = try await MarketplaceResolver.install(entry, marketplaceID: marketplaceID, into: dir)
+    ActionEngine.shared.reloadRules()
   }
 
   /// Removes the installed plugin folder for `pluginID` from Application Support.
@@ -110,6 +111,7 @@ final class MarketplaceStore {
     let dir = PluginLoader.installedPluginsURL().appendingPathComponent(pluginID)
     guard FileManager.default.fileExists(atPath: dir.path) else { return }
     try? FileManager.default.removeItem(at: dir)
+    ActionEngine.shared.reloadRules()
   }
 
   // MARK: - Local folders
