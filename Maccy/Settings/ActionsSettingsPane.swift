@@ -62,7 +62,7 @@ struct ActionsSettingsPane: View {
         Text("Select a rule, or add one.")
           .foregroundStyle(.secondary)
         Text("""
-        Actions run on clipboard values that match a rule — from the popup’s \
+        Actions run on clipboard values that match a rule — from the popup's \
         right-click menu, a global shortcut, or automatically on copy.
         """)
         .font(.caption)
@@ -86,8 +86,8 @@ struct ActionsSettingsPane: View {
 
   private func addRule() {
     var rule = ActionRule()
-    rule.conditions = [.kind(.url)]
-    rule.actions = [ActionConfig(type: .openURL)]
+    rule.conditions = [RuleCondition(provider: "builtin.kind")]
+    rule.actions = [ActionConfig(provider: "builtin.openURL")]
     rules.append(rule)
     selection = rule.id
   }
@@ -129,7 +129,7 @@ private struct RuleEditor: View {
             KeyboardShortcuts.Recorder(for: .runDefaultAction)
             Spacer()
           }
-          Text("Runs the first matching rule’s default action on the most recently copied item.")
+          Text("Runs the first matching rule's default action on the most recently copied item.")
             .font(.caption)
             .foregroundStyle(.secondary)
         }
@@ -154,7 +154,7 @@ private struct RuleEditor: View {
         }
 
         Button {
-          rule.conditions.append(.kind(.url))
+          rule.conditions.append(RuleCondition(provider: "builtin.kind"))
         } label: {
           Label("Add condition", systemImage: "plus")
         }
@@ -186,7 +186,7 @@ private struct RuleEditor: View {
         }
 
         Button {
-          rule.actions.append(ActionConfig(type: .openURL))
+          rule.actions.append(ActionConfig(provider: "builtin.openURL"))
         } label: {
           Label("Add action", systemImage: "plus")
         }
@@ -214,110 +214,106 @@ private struct RuleEditor: View {
 private struct ConditionRow: View {
   @Binding var condition: RuleCondition
   var onDelete: () -> Void
-  @State private var showingTerminalApps = false
+  @State private var showingLongHelp = false
 
-  private enum CondType: String, CaseIterable, Identifiable {
-    case kind, regex, contains, sourceApp, softWrapped, terminalSource
-    var id: String { rawValue }
-    var label: String {
-      switch self {
-      case .kind: return "Kind"
-      case .regex: return "Regex"
-      case .contains: return "Contains"
-      case .sourceApp: return "Source app"
-      case .softWrapped: return "Soft-wrapped"
-      case .terminalSource: return "From terminal"
-      }
-    }
+  private var descriptors: [ProviderDescriptor] {
+    ProviderRegistry.shared.descriptors(kind: .condition)
+  }
+
+  private var selectedDescriptor: ProviderDescriptor? {
+    descriptors.first { $0.id == condition.provider }
   }
 
   var body: some View {
-    HStack {
-      Picker("", selection: typeBinding) {
-        ForEach(CondType.allCases) { Text($0.label).tag($0) }
+    HStack(alignment: .top) {
+      Picker("", selection: $condition.provider) {
+        ForEach(descriptors) { d in
+          Text(d.name).tag(d.id)
+        }
       }
       .labelsHidden()
-      .frame(width: 120)
-
-      switch condition {
-      case .kind:
-        Picker("", selection: kindBinding) {
-          ForEach(ValueKind.allCases) { Text($0.label).tag($0) }
-        }
-        .labelsHidden()
-      case .regex:
-        TextField("pattern", text: stringBinding).textFieldStyle(.roundedBorder)
-      case .contains:
-        TextField("text", text: stringBinding).textFieldStyle(.roundedBorder)
-      case .sourceApp:
-        TextField("bundle id", text: stringBinding).textFieldStyle(.roundedBorder)
-        Button("Choose…") {
-          if let bundleID = AppPicker.choose() { condition = .sourceApp(bundleID) }
-        }
-      case .softWrapped:
-        Text("Copy looks like a wrapped terminal command").foregroundStyle(.secondary)
-      case .terminalSource:
-        Text("Copied from a configured terminal app").foregroundStyle(.secondary)
-        Button("Manage…") { showingTerminalApps = true }
-          .buttonStyle(.borderless)
-          .font(.caption)
+      .frame(width: 160)
+      .help(selectedDescriptor?.description ?? "")
+      .onChange(of: condition.provider) { _, _ in
+        condition.params = .object([:])
       }
+
+      if let d = selectedDescriptor, let longHelp = d.longHelp {
+        Button {
+          showingLongHelp.toggle()
+        } label: {
+          Image(systemName: "info.circle")
+        }
+        .buttonStyle(.borderless)
+        .popover(isPresented: $showingLongHelp) {
+          Text(longHelp)
+            .padding()
+            .frame(maxWidth: 320)
+        }
+      }
+
+      if let d = selectedDescriptor {
+        VStack(alignment: .leading, spacing: 4) {
+          ForEach(d.params) { spec in
+            paramEditor(spec)
+          }
+        }
+      }
+
+      Spacer(minLength: 0)
 
       Button(action: onDelete) { Image(systemName: "trash") }
         .buttonStyle(.borderless)
     }
-    .sheet(isPresented: $showingTerminalApps) {
-      TerminalAppsEditor()
+  }
+
+  @ViewBuilder
+  private func paramEditor(_ spec: ParamSpec) -> some View {
+    switch spec.kind {
+    case .text:
+      TextField(spec.placeholder ?? spec.label, text: stringParam($condition.params, spec.key))
+        .textFieldStyle(.roundedBorder)
+    case .valueKind:
+      Picker("", selection: valueKindParam($condition.params, spec.key)) {
+        ForEach(ValueKind.allCases) { Text($0.label).tag($0) }
+      }
+      .labelsHidden()
+    case .bundleID:
+      HStack {
+        TextField(spec.placeholder ?? spec.label, text: stringParam($condition.params, spec.key))
+          .textFieldStyle(.roundedBorder)
+        Button("Choose…") {
+          if let id = AppPicker.choose() {
+            stringParam($condition.params, spec.key).wrappedValue = id
+          }
+        }
+      }
     }
   }
 
-  private var typeBinding: Binding<CondType> {
+  private func stringParam(_ params: Binding<JSONValue>, _ key: String) -> Binding<String> {
     Binding(
-      get: {
-        switch condition {
-        case .kind: return .kind
-        case .regex: return .regex
-        case .contains: return .contains
-        case .sourceApp: return .sourceApp
-        case .softWrapped: return .softWrapped
-        case .terminalSource: return .terminalSource
-        }
-      },
-      set: { newType in
-        switch newType {
-        case .kind: condition = .kind(.url)
-        case .regex: condition = .regex("")
-        case .contains: condition = .contains("")
-        case .sourceApp: condition = .sourceApp("")
-        case .softWrapped: condition = .softWrapped
-        case .terminalSource: condition = .terminalSource
-        }
+      get: { params.wrappedValue[key]?.stringValue ?? "" },
+      set: { newValue in
+        var object = params.wrappedValue.objectValue ?? [:]
+        object[key] = .string(newValue)
+        params.wrappedValue = .object(object)
       }
     )
   }
 
-  private var kindBinding: Binding<ValueKind> {
-    Binding(
-      get: { if case .kind(let kind) = condition { return kind } else { return .url } },
-      set: { condition = .kind($0) }
-    )
-  }
-
-  private var stringBinding: Binding<String> {
+  private func valueKindParam(_ params: Binding<JSONValue>, _ key: String) -> Binding<ValueKind> {
     Binding(
       get: {
-        switch condition {
-        case .regex(let value), .contains(let value), .sourceApp(let value): return value
-        default: return ""
+        if let raw = params.wrappedValue[key]?.stringValue, let kind = ValueKind(rawValue: raw) {
+          return kind
         }
+        return .url
       },
       set: { newValue in
-        switch condition {
-        case .regex: condition = .regex(newValue)
-        case .contains: condition = .contains(newValue)
-        case .sourceApp: condition = .sourceApp(newValue)
-        default: break
-        }
+        var object = params.wrappedValue.objectValue ?? [:]
+        object[key] = .string(newValue.rawValue)
+        params.wrappedValue = .object(object)
       }
     )
   }
@@ -330,9 +326,18 @@ private struct ActionRow: View {
   var isDefault: Bool
   var onMakeDefault: () -> Void
   var onDelete: () -> Void
+  @State private var showingLongHelp = false
 
   private var shortcutName: KeyboardShortcuts.Name {
     KeyboardShortcuts.Name("action_\(action.id.uuidString)")
+  }
+
+  private var descriptors: [ProviderDescriptor] {
+    ProviderRegistry.shared.descriptors(kind: .action)
+  }
+
+  private var selectedDescriptor: ProviderDescriptor? {
+    descriptors.first { $0.id == action.provider }
   }
 
   var body: some View {
@@ -344,13 +349,31 @@ private struct ActionRow: View {
             .padding(.horizontal, 5).padding(.vertical, 1)
             .background(Color.accentColor.opacity(0.2), in: Capsule())
         }
-        Picker("", selection: $action.type) {
-          ForEach(ActionType.available) { type in
-            Label(type.label, systemImage: type.systemImage).tag(type)
+        Picker("", selection: $action.provider) {
+          ForEach(descriptors) { d in
+            Text(d.name).tag(d.id)
           }
         }
         .labelsHidden()
-        .frame(width: 170)
+        .frame(width: 200)
+        .help(selectedDescriptor?.description ?? "")
+        .onChange(of: action.provider) { _, _ in
+          action.params = .object([:])
+        }
+
+        if let d = selectedDescriptor, let longHelp = d.longHelp {
+          Button {
+            showingLongHelp.toggle()
+          } label: {
+            Image(systemName: "info.circle")
+          }
+          .buttonStyle(.borderless)
+          .popover(isPresented: $showingLongHelp) {
+            Text(longHelp)
+              .padding()
+              .frame(maxWidth: 320)
+          }
+        }
 
         Spacer()
 
@@ -363,7 +386,12 @@ private struct ActionRow: View {
           .buttonStyle(.borderless)
       }
 
-      params
+      if let d = selectedDescriptor {
+        ForEach(d.params) { spec in
+          paramEditor(spec)
+        }
+      }
+
       shortcutRow
     }
     .onAppear { syncRecorder() }
@@ -396,42 +424,54 @@ private struct ActionRow: View {
   }
 
   @ViewBuilder
-  private var params: some View {
-    switch action.type {
-    case .openInApp:
-      HStack {
-        TextField("application bundle id", text: bundleBinding).textFieldStyle(.roundedBorder)
-        Button("Choose…") {
-          if let id = AppPicker.choose() { action.appBundleID = id }
-        }
-      }
-    case .webSearch:
-      TextField("search URL with {query}", text: templateBinding).textFieldStyle(.roundedBorder)
-    case .transform:
-      Picker("", selection: transformBinding) {
-        ForEach(TransformKind.allCases) { Text($0.label).tag($0) }
+  private func paramEditor(_ spec: ParamSpec) -> some View {
+    switch spec.kind {
+    case .text:
+      TextField(spec.placeholder ?? spec.label, text: stringParam($action.params, spec.key))
+        .textFieldStyle(.roundedBorder)
+    case .valueKind:
+      Picker("", selection: valueKindParam($action.params, spec.key)) {
+        ForEach(ValueKind.allCases) { Text($0.label).tag($0) }
       }
       .labelsHidden()
-      .frame(width: 220)
-    case .runShortcut:
-      TextField("Shortcut name (from Shortcuts.app)", text: shortcutBinding)
-        .textFieldStyle(.roundedBorder)
-    default:
-      EmptyView()
+    case .bundleID:
+      HStack {
+        TextField(spec.placeholder ?? spec.label, text: stringParam($action.params, spec.key))
+          .textFieldStyle(.roundedBorder)
+        Button("Choose…") {
+          if let id = AppPicker.choose() {
+            stringParam($action.params, spec.key).wrappedValue = id
+          }
+        }
+      }
     }
   }
 
-  private var bundleBinding: Binding<String> {
-    Binding(get: { action.appBundleID ?? "" }, set: { action.appBundleID = $0 })
+  private func stringParam(_ params: Binding<JSONValue>, _ key: String) -> Binding<String> {
+    Binding(
+      get: { params.wrappedValue[key]?.stringValue ?? "" },
+      set: { newValue in
+        var object = params.wrappedValue.objectValue ?? [:]
+        object[key] = .string(newValue)
+        params.wrappedValue = .object(object)
+      }
+    )
   }
-  private var templateBinding: Binding<String> {
-    Binding(get: { action.searchTemplate ?? WebSearchTemplate.google }, set: { action.searchTemplate = $0 })
-  }
-  private var transformBinding: Binding<TransformKind> {
-    Binding(get: { action.transform ?? .trim }, set: { action.transform = $0 })
-  }
-  private var shortcutBinding: Binding<String> {
-    Binding(get: { action.shortcutName ?? "" }, set: { action.shortcutName = $0 })
+
+  private func valueKindParam(_ params: Binding<JSONValue>, _ key: String) -> Binding<ValueKind> {
+    Binding(
+      get: {
+        if let raw = params.wrappedValue[key]?.stringValue, let kind = ValueKind(rawValue: raw) {
+          return kind
+        }
+        return .url
+      },
+      set: { newValue in
+        var object = params.wrappedValue.objectValue ?? [:]
+        object[key] = .string(newValue.rawValue)
+        params.wrappedValue = .object(object)
+      }
+    )
   }
 }
 

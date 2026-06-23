@@ -85,7 +85,7 @@ struct HistoryItemView: View {
         title: index == 0 ? "\(action.title) (default)" : action.title,
         systemImage: action.systemImage
       ) {
-        ActionEngine.shared.run(action, on: item.item)
+        action.run()
         appState.popup.close()
       }
     }

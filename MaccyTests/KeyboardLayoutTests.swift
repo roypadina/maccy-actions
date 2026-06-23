@@ -35,10 +35,14 @@ final class KeyboardLayoutTests: XCTestCase {
     XCTAssertEqual(KeyboardLayoutFixer.fix(""), "")
   }
 
-  // The transform is registered and labeled, so it propagates to the CLI
-  // capabilities list and the Settings picker (both iterate allCases).
-  func testTransformKindRegistered() {
-    XCTAssertTrue(TransformKind.allCases.contains(.fixKeyboardLayout))
-    XCTAssertEqual(TransformKind.fixKeyboardLayout.label, "Fix keyboard layout (EN ⇄ HE)")
+  // Was: asserted TransformKind.allCases — the layout fixer is now a registry provider.
+  @MainActor
+  func testFixKeyboardLayoutProviderRegistered() {
+    ProviderRegistry.shared.reset()
+    BuiltinProviders.registerBuiltins(into: .shared)
+    FirstPartyProviders.registerFirstParty(into: .shared)
+    let provider = ProviderRegistry.shared.action("com.maccay.fix-keyboard-layout")
+    XCTAssertNotNil(provider)
+    XCTAssertEqual(provider?.descriptor.id, "com.maccay.fix-keyboard-layout")
   }
 }

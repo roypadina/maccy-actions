@@ -15,6 +15,11 @@ enum ActionsCLI {
   // MARK: Entry point
 
   static func run(_ args: [String]) -> Int32 {
+    // Populate the provider registry before any sub-command runs: `describe`
+    // emits the registry catalog, and rule decode/validate reference provider
+    // ids. Native providers only in Milestone A (no PluginLoader yet).
+    registerProviders()
+
     guard let namespace = args.first else {
       return fail("Missing command. Expected 'rules' or 'terminals'.")
     }
@@ -23,6 +28,22 @@ enum ActionsCLI {
     case "rules": return runRules(rest)
     case "terminals": return runTerminals(rest)
     default: return fail("Unknown command: \(namespace). Expected 'rules' or 'terminals'.")
+    }
+  }
+
+  // Register the native condition/action providers into the shared registry so
+  // the headless CLI's `describe` catalog (and any registry-backed validation)
+  // matches the running app. `ProviderRegistry` is @MainActor; the CLI has no
+  // run loop, so we enter the actor synchronously (same pattern AppDelegate uses
+  // for the distributed-notification reload).
+  //
+  // Milestone A: native providers only. Milestones B/C add a
+  // `PluginLoader.loadAll(into:extraFolders:)` call here so the CLI catalog also
+  // includes folder-loaded plugins.
+  private static func registerProviders() {
+    MainActor.assumeIsolated {
+      BuiltinProviders.registerBuiltins(into: .shared)
+      FirstPartyProviders.registerFirstParty(into: .shared)
     }
   }
 
@@ -69,7 +90,7 @@ enum ActionsCLI {
     } catch {
       return fail(describe(error))
     }
-    if let problem = validate(rule) { return fail(problem) }
+    do { try validate(rule) } catch { return fail(describe(error)) }
     var rules = Defaults[.actionRules]
     rules.append(rule)
     Defaults[.actionRules] = rules
@@ -87,7 +108,7 @@ enum ActionsCLI {
     } catch {
       return fail(describe(error))
     }
-    if let problem = validate(rule) { return fail(problem) }
+    do { try validate(rule) } catch { return fail(describe(error)) }
     var rules = Defaults[.actionRules]
     guard let index = rules.firstIndex(where: { $0.id == uuid }) else {
       return fail("No rule with id \(id).")
@@ -149,7 +170,7 @@ enum ActionsCLI {
       return fail(describe(error))
     }
     for rule in imported {
-      if let problem = validate(rule) { return fail(problem) }
+      do { try validate(rule) } catch { return fail(describe(error)) }
     }
     Defaults[.actionRules] = imported
     postChanged()
@@ -157,53 +178,58 @@ enum ActionsCLI {
   }
 
   private static func rulesDescribe() -> Int32 {
-    // Built from the LIVE enums so the catalog can't drift from code.
-    let actionTypes: [[String: Any]] = ActionType.allCases.map { type in
-      var entry: [String: Any] = ["type": type.rawValue, "label": type.label]
-      switch type {
-      case .openInApp: entry["requires"] = ["appBundleID"]
-      case .webSearch: entry["requires"] = ["searchTemplate"]
-      case .transform: entry["requires"] = ["transform"]
-      case .runShortcut: entry["requires"] = ["shortcutName"]
-      default: entry["requires"] = []
+    // Built from the LIVE provider registry so the catalog can't drift from the
+    // installed providers. `ProviderRegistry` is @MainActor; enter synchronously
+    // (the CLI has no run loop). `registerProviders()` ran in `run(_:)` first.
+    let catalog: [String: Any] = MainActor.assumeIsolated {
+      func encode(_ descriptors: [ProviderDescriptor]) -> [[String: Any]] {
+        descriptors.map { descriptor -> [String: Any] in
+          [
+            "id": descriptor.id,
+            "name": descriptor.name,
+            "description": descriptor.description,
+            "engine": descriptor.engine.rawValue,
+            "params": descriptor.params.map { spec -> [String: Any] in
+              [
+                "key": spec.key,
+                "label": spec.label,
+                "kind": spec.kind.rawValue
+              ]
+            },
+            "capabilities": descriptor.capabilities.map(\.rawValue),
+            "verified": descriptor.isVerified
+          ]
+        }
       }
-      return entry
+
+      let conditionProviders = encode(ProviderRegistry.shared.descriptors(kind: .condition))
+      let actionProviders = encode(ProviderRegistry.shared.descriptors(kind: .action))
+
+      return [
+        "conditionProviders": conditionProviders,
+        "actionProviders": actionProviders,
+        "valueKinds": ValueKind.allCases.map(\.rawValue),
+        "matchModes": MatchMode.allCases.map(\.rawValue),
+        "shortcutGrammar": [
+          "modifiers": [
+            "cmd": ["cmd", "command", "⌘"],
+            "shift": ["shift", "⇧"],
+            "opt": ["opt", "option", "alt", "⌥"],
+            "ctrl": ["ctrl", "control", "⌃"]
+          ],
+          "keys": [
+            "letters a-z, digits 0-9",
+            "space", "return/enter", "tab", "escape/esc",
+            "delete/backspace", "f1-f12"
+          ],
+          "format": "modifiers and key joined by '+', case-insensitive",
+          "example": "cmd+shift+u"
+        ],
+        "actionShortcutNote": "Optional per-action 'shortcut' field (e.g. \"cmd+shift+u\") " +
+                              "runs that action unconditionally on the most recent clip.",
+        "defaultTerminalApps": TerminalApps.defaults
+      ]
     }
-
-    let conditionTypes: [[String: Any]] = [
-      ["type": "kind", "value": "ValueKind", "carriesValue": true],
-      ["type": "regex", "value": "String", "carriesValue": true],
-      ["type": "contains", "value": "String", "carriesValue": true],
-      ["type": "sourceApp", "value": "bundleID", "carriesValue": true],
-      ["type": "softWrapped", "carriesValue": false],
-      ["type": "terminalSource", "carriesValue": false]
-    ]
-
-    let catalog: [String: Any] = [
-      "valueKinds": ValueKind.allCases.map(\.rawValue),
-      "actionTypes": actionTypes,
-      "transformKinds": TransformKind.allCases.map(\.rawValue),
-      "matchModes": MatchMode.allCases.map(\.rawValue),
-      "conditionTypes": conditionTypes,
-      "shortcutGrammar": [
-        "modifiers": [
-          "cmd": ["cmd", "command", "⌘"],
-          "shift": ["shift", "⇧"],
-          "opt": ["opt", "option", "alt", "⌥"],
-          "ctrl": ["ctrl", "control", "⌃"]
-        ],
-        "keys": [
-          "letters a-z, digits 0-9",
-          "space", "return/enter", "tab", "escape/esc",
-          "delete/backspace", "f1-f12"
-        ],
-        "format": "modifiers and key joined by '+', case-insensitive",
-        "example": "cmd+shift+u"
-      ],
-      "actionShortcutNote": "Optional per-action 'shortcut' field (e.g. \"cmd+shift+u\") " +
-                            "runs that action unconditionally on the most recent clip.",
-      "defaultTerminalApps": TerminalApps.defaults
-    ]
 
     return emitJSONObject(catalog)
   }
@@ -307,11 +333,17 @@ enum ActionsCLI {
     return try array.map { try decodeRule(overlaying: $0) }
   }
 
-  // Overlay a partial rule object onto the encoded defaults, then decode. Fresh
-  // ids are generated for the rule and any action that omitted one.
+  // Overlay a partial rule object onto the encoded defaults, then decode. The new
+  // schema is `{provider, params}`: a default `ActionConfig()` encodes to
+  // {"id": …, "provider": "builtin.openURL", "params": {}} and a default
+  // `ActionRule()` to {…, "schemaVersion": 3, "conditions": [], "actions": []}.
+  // `provider` and `params` are ordinary stored properties, so they merge through
+  // the generic per-key overlay with no special-casing — only the "actions" array
+  // (whose elements overlay onto a default ActionConfig) is handled specially.
+  // Fresh ids are generated for the rule and any action that omitted one.
   private static func decodeRule(overlaying overlay: [String: Any]) throws -> ActionRule {
     let baseRule = try jsonObject(of: ActionRule())
-    let baseAction = try jsonObject(of: ActionConfig())
+    let baseAction = try jsonObject(of: ActionConfig(provider: "builtin.openURL"))
 
     var merged = baseRule
     let suppliesID = overlay["id"] != nil
@@ -351,41 +383,27 @@ enum ActionsCLI {
 
   // MARK: Validation
 
-  // Returns a human-readable problem string if the rule is invalid, else nil.
-  private static func validate(_ rule: ActionRule) -> String? {
-    for action in rule.actions {
-      switch action.type {
-      case .openInApp:
-        if (action.appBundleID ?? "").isEmpty {
-          return "Action of type 'openInApp' requires a non-empty 'appBundleID'."
+  // Validates a rule before any write: provider ids must resolve in the registry,
+  // and any per-action shortcut must parse. ParamSpec-level checks are the
+  // provider's concern at run time, so no per-type required-field checks remain.
+  // `ProviderRegistry` is @MainActor; the CLI has no run loop, so enter the actor
+  // synchronously (providers were registered in `run(_:)`).
+  private static func validate(_ rule: ActionRule) throws {
+    try MainActor.assumeIsolated {
+      for condition in rule.conditions {
+        guard ProviderRegistry.shared.condition(condition.provider) != nil else {
+          throw CLIError("Invalid rule: unknown condition provider \"\(condition.provider)\"")
         }
-      case .webSearch:
-        if (action.searchTemplate ?? "").isEmpty {
-          return "Action of type 'webSearch' requires a non-empty 'searchTemplate'."
-        }
-      case .transform:
-        if action.transform == nil {
-          return "Action of type 'transform' requires a 'transform' kind."
-        }
-      case .runShortcut:
-        if (action.shortcutName ?? "").isEmpty {
-          return "Action of type 'runShortcut' requires a non-empty 'shortcutName'."
-        }
-      case .openURL:
-        break
       }
-      if let spec = action.shortcut, ShortcutSpec.parse(spec) == nil {
-        return "Could not parse action shortcut '\(spec)' (e.g. \"cmd+shift+u\")."
-      }
-    }
-    for condition in rule.conditions {
-      if case .regex(let pattern) = condition {
-        if (try? NSRegularExpression(pattern: pattern)) == nil {
-          return "Condition regex does not compile: \(pattern)"
+      for action in rule.actions {
+        guard ProviderRegistry.shared.action(action.provider) != nil else {
+          throw CLIError("Invalid rule: unknown action provider \"\(action.provider)\"")
+        }
+        if let spec = action.shortcut, ShortcutSpec.parse(spec) == nil {
+          throw CLIError("Invalid rule: unparseable shortcut \"\(spec)\"")
         }
       }
     }
-    return nil
   }
 
   // MARK: Output

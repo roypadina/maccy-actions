@@ -43,7 +43,7 @@ struct ActionsListView: View {
 
         ForEach(Array(actions.enumerated()), id: \.element.id) { index, action in
           Button {
-            ActionEngine.shared.run(action, on: item.item)
+            action.run()
             appState.popup.close()
           } label: {
             HStack(spacing: 6) {

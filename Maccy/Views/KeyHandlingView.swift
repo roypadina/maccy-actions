@@ -37,7 +37,7 @@ struct KeyHandlingView<Content: View>: View {
              let lead = appState.navigator.leadHistoryItem {
             let actions = ActionEngine.shared.resolvedActions(for: lead.item)
             if digit <= actions.count {
-              ActionEngine.shared.run(actions[digit - 1], on: lead.item)
+              actions[digit - 1].run()
               appState.popup.close()
               return .handled
             }

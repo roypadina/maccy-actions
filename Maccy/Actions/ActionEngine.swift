@@ -5,7 +5,7 @@ import KeyboardShortcuts
 import Observation
 
 extension Defaults.Keys {
-  static let actionRules = Key<[ActionRule]>("actionRules", default: ActionRule.presets)
+  static let actionRules = Key<[ActionRule]>("actionRulesV3", default: ActionRule.presets)
   static let terminalAppBundleIDs = Key<[String]>("terminalAppBundleIDs", default: TerminalApps.defaults)
 }
 
@@ -30,41 +30,54 @@ final class ActionEngine {
   // edits/reloads without re-registering (which would clobber other handlers).
   private var registeredActionShortcutNames = Set<String>()
 
-  private init() {}
+  // Set once the built-in + first-party providers have been registered, so a
+  // second init (or an explicit registerProviders() call) is a cheap no-op.
+  private var providersRegistered = false
+
+  private init() {
+    registerProviders()
+  }
+
+  // Idempotently register the native built-in and first-party providers into
+  // the shared registry. Built-ins: builtin.kind/regex/contains/sourceApp +
+  // builtin.openURL/openInApp/webSearch/runShortcut. First-party:
+  // com.maccay.soft-wrap/terminal-source + the six transform actions.
+  func registerProviders() {
+    guard !providersRegistered else { return }
+    providersRegistered = true
+    BuiltinProviders.registerBuiltins(into: .shared)
+    FirstPartyProviders.registerFirstParty(into: .shared)
+  }
 
   var rules: [ActionRule] { Defaults[.actionRules] }
+
+  // Build the provider input for an item from the same primitives the old
+  // switch used: primary string, all matching ValueKinds, the source app
+  // bundle id, and the file URLs (for openInApp / filePath providers).
+  private func makeInput(from item: HistoryItem) -> PluginInput {
+    PluginInput(
+      string: ValueClassifier.primaryString(of: item),
+      kinds: ValueClassifier.kinds(of: item),
+      sourceAppBundleID: item.application,
+      fileURLs: item.fileURLs
+    )
+  }
 
   // MARK: Matching
 
   func matchingRules(for item: HistoryItem) -> [ActionRule] {
-    let kinds = ValueClassifier.kinds(of: item)
-    let text = ValueClassifier.primaryString(of: item)
-    let app = item.application
-    return rules.filter { $0.enabled && matches($0, kinds: kinds, text: text, app: app) }
+    let input = makeInput(from: item)
+    return rules.filter { $0.enabled && matches($0, input: input) }
   }
 
-  private func matches(_ rule: ActionRule, kinds: Set<ValueKind>, text: String, app: String?) -> Bool {
+  private func matches(_ rule: ActionRule, input: PluginInput) -> Bool {
     guard !rule.conditions.isEmpty else { return false }
 
-    let results = rule.conditions.map { condition -> Bool in
-      switch condition {
-      case .kind(let kind):
-        return kinds.contains(kind)
-      case .sourceApp(let bundle):
-        return app == bundle
-      case .contains(let needle):
-        return !needle.isEmpty && text.localizedCaseInsensitiveContains(needle)
-      case .regex(let pattern):
-        guard !pattern.isEmpty, let regex = try? NSRegularExpression(pattern: pattern) else {
-          return false
-        }
-        let range = NSRange(text.startIndex..., in: text)
-        return regex.firstMatch(in: text, range: range) != nil
-      case .softWrapped:
-        return TextUnwrap.isSoftWrapped(text)
-      case .terminalSource:
-        return app.map { Defaults[.terminalAppBundleIDs].contains($0) } ?? false
+    let results = rule.conditions.map { cond -> Bool in
+      guard let provider = ProviderRegistry.shared.condition(cond.provider) else {
+        return false
       }
+      return (try? provider.evaluate(input, params: cond.params)) ?? false
     }
 
     return rule.matchMode == .all ? !results.contains(false) : results.contains(true)
@@ -72,53 +85,81 @@ final class ActionEngine {
 
   // MARK: Resolution
 
-  // All runnable actions for an item, in rule order then action order, deduped.
-  // The first element is the default action.
-  func resolvedActions(for item: HistoryItem) -> [ClipboardAction] {
+  // All runnable actions for an item, in rule order then action order, deduped by
+  // provider id. The first element is the default. Each item carries a `run`
+  // closure that dispatches the action through the registry (`runProvider`),
+  // preserving the `.replace` echo-guard ordering. Title comes from the provider
+  // descriptor's name; the icon is a generic action glyph (descriptors carry no
+  // system image). Surfaces the popup right-click menu, ⌃1…⌃9, and the slideout
+  // Actions list.
+  func resolvedActions(for item: HistoryItem) -> [RowActionItem] {
+    let input = makeInput(from: item)
     var seen = Set<String>()
-    var result: [ClipboardAction] = []
+    var result: [RowActionItem] = []
     for rule in matchingRules(for: item) {
       for config in rule.actions {
-        guard let action = ActionFactory.make(config), action.canRun(on: item) else { continue }
-        if seen.insert(action.id).inserted {
-          result.append(action)
+        guard let descriptor = ProviderRegistry.shared.action(config.provider)?.descriptor else {
+          continue
         }
+        guard seen.insert(config.provider).inserted else { continue }
+        let providerID = config.provider
+        let params = config.params
+        result.append(
+          RowActionItem(
+            id: providerID,
+            title: descriptor.name,
+            systemImage: "bolt"
+          ) { [weak self] in
+            self?.runProvider(providerID, params: params, input: input)
+          }
+        )
       }
     }
     return result
   }
 
-  func defaultAction(for item: HistoryItem) -> ClipboardAction? {
-    resolvedActions(for: item).first
-  }
-
   // MARK: Running
 
-  func run(_ action: ClipboardAction, on item: HistoryItem) {
+  // Resolve `providerID` to an ActionProvider and run it on `input`. Mirrors the
+  // old run(_:on:): a detached MainActor Task, any throw swallowed with a beep.
+  // A `.replace(s)` outcome is the auto-transform path — note it as the expected
+  // echo (loop guard) BEFORE writing the clipboard, exactly like the old
+  // TransformAction did. `.sideEffect` / `.none` write nothing.
+  private func runProvider(_ providerID: String, params: JSONValue, input: PluginInput) {
+    guard let provider = ProviderRegistry.shared.action(providerID) else {
+      NSSound.beep()
+      return
+    }
     Task {
       do {
-        try await action.run(on: item)
+        let outcome = try await provider.run(input, params: params)
+        switch outcome {
+        case .replace(let value):
+          ActionEngine.shared.noteAutoOutput(value)
+          Clipboard.shared.copy(value)
+        case .sideEffect, .none:
+          break
+        }
       } catch {
         NSSound.beep()
       }
     }
   }
 
-  func runDefault(for item: HistoryItem) {
-    guard let action = defaultAction(for: item) else {
-      NSSound.beep()
-      return
-    }
-    run(action, on: item)
-  }
-
   // Global-shortcut entry point: run the default action on the most recent item.
+  // The default action is the first action of the first matching (enabled) rule.
   func runDefaultActionForCurrent() {
     guard let item = History.shared.unpinnedItems.first?.item ?? History.shared.all.first?.item else {
       NSSound.beep()
       return
     }
-    runDefault(for: item)
+    let input = makeInput(from: item)
+    guard let rule = matchingRules(for: item).first,
+          let config = rule.actions.first else {
+      NSSound.beep()
+      return
+    }
+    runProvider(config.provider, params: config.params, input: input)
   }
 
   // MARK: Per-action shortcuts
@@ -159,13 +200,12 @@ final class ActionEngine {
   // the most recent item. No rule matching, no priority, no auto-run gate.
   func runSpecificActionForCurrent(actionID: UUID) {
     guard let config = Defaults[.actionRules].flatMap(\.actions).first(where: { $0.id == actionID }),
-          let action = ActionFactory.make(config),
-          let item = History.shared.unpinnedItems.first?.item ?? History.shared.all.first?.item,
-          action.canRun(on: item) else {
+          let item = History.shared.unpinnedItems.first?.item ?? History.shared.all.first?.item else {
       NSSound.beep()
       return
     }
-    run(action, on: item)
+    let input = makeInput(from: item)
+    runProvider(config.provider, params: config.params, input: input)
   }
 
   // MARK: Auto-run (called from Clipboard.onNewCopy)
@@ -185,11 +225,10 @@ final class ActionEngine {
       return
     }
 
+    let input = makeInput(from: item)
     for rule in matchingRules(for: item) where rule.autoRunDefault {
-      guard let config = rule.actions.first,
-            let action = ActionFactory.make(config),
-            action.canRun(on: item) else { continue }
-      run(action, on: item)
+      guard let config = rule.actions.first else { continue }
+      runProvider(config.provider, params: config.params, input: input)
       break // only the first matching auto-run rule
     }
   }
