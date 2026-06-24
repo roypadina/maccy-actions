@@ -24,8 +24,8 @@ struct KindCondition: ConditionProvider {
   let descriptor = ProviderDescriptor(
     id: "builtin.kind",
     name: "Value kind",
-    description: "Matches when the clipboard value is the given kind: URL, email, phone, file path, color hex, image, or plain text.",
-    longHelp: "Uses NSDataDetector and content inspection to classify the clipboard value. Select the kind from the picker. A single item can match multiple kinds — for example, a URL also matches 'text'.",
+    description: "Matches when the copied item is a specific type — URL, email, phone number, file path, color, image, or text.",
+    longHelp: "Choose a kind from the picker. The rule matches when the clipboard item belongs to that kind. One item can be several kinds at once — a web address is both a URL and text, so it matches either.",
     kind: .condition,
     engine: .native,
     params: [
@@ -57,8 +57,8 @@ struct RegexCondition: ConditionProvider {
   let descriptor = ProviderDescriptor(
     id: "builtin.regex",
     name: "Regex match",
-    description: "Matches when the clipboard text matches the given regular expression (ICU, case-sensitive).",
-    longHelp: "Uses NSRegularExpression (ICU syntax). An empty or invalid pattern never matches. The match is applied to the full text — use anchors (^ $) to constrain position.",
+    description: "Matches when the copied text matches a regular expression pattern you provide.",
+    longHelp: "Enter a regular expression in the Pattern field. The rule matches when the clipboard text fits the pattern anywhere in the text. Use ^ at the start and $ at the end of your pattern to require the whole text to match. An empty or invalid pattern never matches.",
     kind: .condition,
     engine: .native,
     params: [
@@ -91,8 +91,8 @@ struct ContainsCondition: ConditionProvider {
   let descriptor = ProviderDescriptor(
     id: "builtin.contains",
     name: "Contains text",
-    description: "Matches when the clipboard text contains the given substring (case-insensitive, locale-aware).",
-    longHelp: "Uses localizedCaseInsensitiveContains. An empty needle never matches.",
+    description: "Matches when the copied text contains the words you type — uppercase/lowercase doesn't matter.",
+    longHelp: "Type any text in the Text field; the rule matches whenever the clipboard contains it, ignoring uppercase and lowercase differences. Leave it empty and it never matches.",
     kind: .condition,
     engine: .native,
     params: [
@@ -121,8 +121,8 @@ struct SourceAppCondition: ConditionProvider {
   let descriptor = ProviderDescriptor(
     id: "builtin.sourceApp",
     name: "Source application",
-    description: "Matches when the clipboard was copied from the application with the given bundle identifier.",
-    longHelp: "Compares the bundle ID of the frontmost app at copy time. A missing or empty bundle ID never matches. Use the bundle identifier exactly as it appears in the app's Info.plist.",
+    description: "Matches when the text was copied from a specific app on your Mac.",
+    longHelp: "Pick the app from the Application field (or type its identifier). The rule matches only when you copied the text while that app was in the foreground. If no app is selected, the rule never matches.",
     kind: .condition,
     engine: .native,
     params: [
@@ -153,8 +153,8 @@ struct OpenURLProvider: ActionProvider {
   let descriptor = ProviderDescriptor(
     id: "builtin.openURL",
     name: "Open as URL",
-    description: "Opens the clipboard text as a URL. Bare text gets https://, emails get mailto:. No parameters required.",
-    longHelp: "Builds an openable URL from the clipboard text: if a scheme is already present it is used as-is; text containing '@' becomes a mailto: URL; otherwise https:// is prepended. Fails if the text contains spaces or cannot form a valid URL.",
+    description: "Opens the copied text as a link. Web addresses open in your browser; email addresses open in your mail app.",
+    longHelp: "No setup needed. If the copied text already looks like a link it opens as-is. Text that looks like an email address opens your mail app. Anything else is treated as a web address. Fails if the text cannot be turned into a valid link.",
     kind: .action,
     engine: .native,
     params: [],
@@ -177,8 +177,8 @@ struct OpenInAppProvider: ActionProvider {
   let descriptor = ProviderDescriptor(
     id: "builtin.openInApp",
     name: "Open in app",
-    description: "Opens the clipboard content in the application with the given bundle ID. Works with URLs and file paths.",
-    longHelp: "Resolves the application URL via NSWorkspace. If the clipboard contains file URLs they are opened directly; otherwise the text is converted to a URL and passed to the app. Fails if the application is not installed.",
+    description: "Opens the copied text or file in a specific app you choose. Works with links and file paths.",
+    longHelp: "Pick the app from the Application field. When the rule fires, the copied content is sent directly to that app — file paths open as files, links open as links. Fails if the chosen app is not installed on your Mac.",
     kind: .action,
     engine: .native,
     params: [
@@ -221,8 +221,8 @@ struct WebSearchProvider: ActionProvider {
   let descriptor = ProviderDescriptor(
     id: "builtin.webSearch",
     name: "Web search",
-    description: "Searches the clipboard text using a URL template. Use {query} as the placeholder for the percent-encoded search term.",
-    longHelp: "Percent-encodes the clipboard text and substitutes it into the template at {query}, then opens the resulting URL. The default template is Google search. Fails if the clipboard text is empty.",
+    description: "Searches the web for the copied text. Uses Google by default; swap in any search engine URL.",
+    longHelp: "The copied text is inserted into the Search URL at the {query} placeholder and the result opens in your browser. The default is a Google search. To use a different search engine, replace the URL with that engine's search URL and put {query} where the search terms go. Fails if the clipboard is empty.",
     kind: .action,
     engine: .native,
     params: [
@@ -264,8 +264,8 @@ struct RunShortcutProvider: ActionProvider {
   let descriptor = ProviderDescriptor(
     id: "builtin.runShortcut",
     name: "Run Shortcut",
-    description: "Runs the named shortcut from Shortcuts.app, passing the clipboard text as plain-text input.",
-    longHelp: "Opens the shortcuts://run-shortcut URL with the shortcut name and clipboard text. The shortcut must exist in Shortcuts.app. The clipboard is not modified by this action.",
+    description: "Runs one of your Shortcuts (from the Shortcuts app), passing the copied text to it.",
+    longHelp: "Type the exact name of the shortcut in the Shortcut name field — it must already exist in your Shortcuts app. The copied text is handed to the shortcut as its input. The clipboard itself is left unchanged after the shortcut runs.",
     kind: .action,
     engine: .native,
     params: [

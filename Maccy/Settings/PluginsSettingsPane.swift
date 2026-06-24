@@ -633,7 +633,7 @@ private struct ProviderRowView: View {
             .fontWeight(.medium)
           kindChip
           engineChip
-          if let longHelp = descriptor.longHelp {
+          if descriptor.longHelp != nil {
             Button {
               showingLongHelp.toggle()
             } label: {
@@ -642,9 +642,7 @@ private struct ProviderRowView: View {
             }
             .buttonStyle(.borderless)
             .popover(isPresented: $showingLongHelp) {
-              Text(longHelp)
-                .padding()
-                .frame(maxWidth: 320)
+              LongHelpPopover(descriptor: descriptor)
             }
           }
         }
@@ -760,6 +758,73 @@ private struct PackageGroupView: View {
       .background(Color.orange.opacity(0.2), in: Capsule())
       .foregroundStyle(.orange)
       .help("This plugin comes from a source Maccay can't verify.")
+  }
+}
+
+// MARK: - Long-help popover
+
+/// Structured popover shown when the user taps ⓘ on a provider row.
+/// Renders name, kind/engine chips, short description, a divider, the full
+/// longHelp text, and (if present) a capabilities line — all wrapping naturally.
+private struct LongHelpPopover: View {
+  let descriptor: ProviderDescriptor
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text(descriptor.name)
+        .font(.headline)
+
+      HStack(spacing: 6) {
+        kindChip
+        engineChip
+      }
+
+      Text(descriptor.description)
+        .font(.callout)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+
+      Divider()
+
+      Text(descriptor.longHelp ?? "")
+        .font(.body)
+        .fixedSize(horizontal: false, vertical: true)
+
+      if !descriptor.capabilities.isEmpty {
+        let names = descriptor.capabilities.map(\.rawValue).sorted().joined(separator: ", ")
+        Text("Requires: \(names)")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+    }
+    .frame(width: 340, alignment: .leading)
+    .padding(14)
+  }
+
+  private var kindChip: some View {
+    let isCondition = descriptor.kind == .condition
+    return Text(isCondition ? "Condition" : "Action")
+      .font(.caption2)
+      .fontWeight(.semibold)
+      .padding(.horizontal, 6)
+      .padding(.vertical, 1)
+      .background((isCondition ? Color.blue : Color.green).opacity(0.18), in: Capsule())
+      .foregroundStyle(isCondition ? Color.blue : Color.green)
+  }
+
+  private var engineChip: some View {
+    let label: String
+    switch descriptor.engine {
+    case .native:      label = "Native"
+    case .declarative: label = "Declarative"
+    case .javascript:  label = "JavaScript"
+    }
+    return Text(label)
+      .font(.caption2)
+      .padding(.horizontal, 6)
+      .padding(.vertical, 1)
+      .background(Color.secondary.opacity(0.15), in: Capsule())
+      .foregroundStyle(.secondary)
   }
 }
 
