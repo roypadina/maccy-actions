@@ -323,80 +323,71 @@ final class DeclarativeEngineTests: XCTestCase {
     }
   }
 
-  // MARK: - makeProviders(manifest:source:)
+  // MARK: - makeProvider(spec:descriptor:)
 
   @MainActor
-  func testMakeProvidersBuildsAction() async throws {
-    let manifest = PluginManifest(
+  func testMakeProviderBuildsAction() async throws {
+    let spec = ProviderSpec(
       id: "com.test.base64ish",
       name: "Wrap Brackets",
-      version: "1.0.0",
-      author: nil,
       description: "Wraps text in brackets",
       longHelp: nil,
       kind: .action,
       engine: .declarative,
       params: nil,
-      entry: nil,
-      capabilities: nil,
-      minAppVersion: nil,
       declarative: .object(["transform": .array([
         .object(["op": .string("prepend"), "text": .string("[")]),
         .object(["op": .string("append"), "text": .string("]")])
-      ])])
+      ])]),
+      entry: nil,
+      function: nil
     )
-    let (conditions, actions) = DeclarativeEngine.makeProviders(manifest: manifest, source: .bundled)
-    XCTAssertTrue(conditions.isEmpty)
-    XCTAssertEqual(actions.count, 1)
-    XCTAssertEqual(actions.first?.descriptor.id, "com.test.base64ish")
-    let outcome = try await actions[0].run(makeInput("x"), params: .emptyObject)
+    let built = DeclarativeEngine.makeProvider(spec: spec, descriptor: actionDescriptor(id: spec.id))
+    XCTAssertNil(built.condition)
+    let action = try XCTUnwrap(built.action)
+    XCTAssertEqual(action.descriptor.id, "com.test.base64ish")
+    let outcome = try await action.run(makeInput("x"), params: .emptyObject)
     XCTAssertEqual(outcome, .replace("[x]"))
   }
 
   @MainActor
-  func testMakeProvidersBuildsCondition() throws {
-    let manifest = PluginManifest(
+  func testMakeProviderBuildsCondition() throws {
+    let spec = ProviderSpec(
       id: "com.test.isurl",
       name: "Is URL",
-      version: "1.0.0",
-      author: nil,
       description: "True when the text looks like a URL",
       longHelp: nil,
       kind: .condition,
       engine: .declarative,
       params: nil,
+      declarative: .object(["predicate": .object(["regex": .string("^https?://")])]),
       entry: nil,
-      capabilities: nil,
-      minAppVersion: nil,
-      declarative: .object(["predicate": .object(["regex": .string("^https?://")])])
+      function: nil
     )
-    let (conditions, actions) = DeclarativeEngine.makeProviders(manifest: manifest, source: .bundled)
-    XCTAssertTrue(actions.isEmpty)
-    XCTAssertEqual(conditions.count, 1)
-    XCTAssertEqual(conditions.first?.descriptor.id, "com.test.isurl")
-    XCTAssertTrue(try conditions[0].evaluate(makeInput("https://x.com"), params: .emptyObject))
-    XCTAssertFalse(try conditions[0].evaluate(makeInput("not a url"), params: .emptyObject))
+    let built = DeclarativeEngine.makeProvider(spec: spec, descriptor: conditionDescriptor(id: spec.id))
+    XCTAssertNil(built.action)
+    let condition = try XCTUnwrap(built.condition)
+    XCTAssertEqual(condition.descriptor.id, "com.test.isurl")
+    XCTAssertTrue(try condition.evaluate(makeInput("https://x.com"), params: .emptyObject))
+    XCTAssertFalse(try condition.evaluate(makeInput("not a url"), params: .emptyObject))
   }
 
   @MainActor
-  func testMakeProvidersWithNilDeclarativeReturnsEmpty() {
-    let manifest = PluginManifest(
+  func testMakeProviderWithNilDeclarativeReturnsEmpty() {
+    let spec = ProviderSpec(
       id: "com.test.broken",
       name: "Broken",
-      version: "1.0.0",
-      author: nil,
       description: "No declarative spec",
       longHelp: nil,
       kind: .action,
       engine: .declarative,
       params: nil,
+      declarative: nil,
       entry: nil,
-      capabilities: nil,
-      minAppVersion: nil,
-      declarative: nil
+      function: nil
     )
-    let (conditions, actions) = DeclarativeEngine.makeProviders(manifest: manifest, source: .bundled)
-    XCTAssertTrue(conditions.isEmpty)
-    XCTAssertTrue(actions.isEmpty)
+    let built = DeclarativeEngine.makeProvider(spec: spec, descriptor: actionDescriptor(id: spec.id))
+    XCTAssertNil(built.condition)
+    XCTAssertNil(built.action)
   }
 }

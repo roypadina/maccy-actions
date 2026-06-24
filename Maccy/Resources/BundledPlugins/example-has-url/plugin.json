@@ -1,9 +1,19 @@
 {
-  "id": "com.maccay.example.has-url",
+  "id": "com.maccay.example-has-url",
   "name": "Has URL",
   "version": "1.0.0",
+  "author": { "name": "Maccay" },
   "description": "True when the clipboard text contains an http or https URL.",
-  "kind": "condition",
-  "engine": "javascript",
-  "entry": "main.js"
+  "capabilities": [],
+  "providers": [
+    {
+      "id": "com.maccay.example.has-url",
+      "name": "Has URL",
+      "description": "True when the clipboard text contains an http or https URL.",
+      "kind": "condition",
+      "engine": "javascript",
+      "entry": "main.js",
+      "function": "matches"
+    }
+  ]
 }

@@ -56,6 +56,9 @@ final class BundledPluginsTests: XCTestCase {
     XCTAssertEqual(descriptor?.engine, .declarative)
     XCTAssertEqual(descriptor?.kind, .action)
     XCTAssertTrue(descriptor?.isVerified == true)
+    // Package membership: provider belongs to its owning package.
+    XCTAssertEqual(descriptor?.pluginID, "com.maccay.example-shout")
+    XCTAssertEqual(descriptor?.pluginName, "Shout")
   }
 
   // MARK: - example-has-url (JS condition)
@@ -103,5 +106,8 @@ final class BundledPluginsTests: XCTestCase {
     XCTAssertEqual(descriptor?.engine, .javascript)
     XCTAssertEqual(descriptor?.kind, .condition)
     XCTAssertTrue(descriptor?.isVerified == true)
+    // Package membership: provider belongs to its owning package.
+    XCTAssertEqual(descriptor?.pluginID, "com.maccay.example-has-url")
+    XCTAssertEqual(descriptor?.pluginName, "Has URL")
   }
 }

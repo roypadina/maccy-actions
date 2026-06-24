@@ -79,16 +79,17 @@ final class JSPluginRuntime {
     }
   }
 
-  /// Calls the global `transform(input)`; expects a String back.
-  func callTransform(_ input: String) throws -> String {
-    let result = try call("transform", argument: input)
+  /// Calls the named global transform function (default `transform`); expects a String back.
+  /// Multiple providers can share one runtime and call different functions on it.
+  func callTransform(function: String = "transform", _ input: String) throws -> String {
+    let result = try call(function, argument: input)
     guard result.isString else { throw JSPluginError.wrongReturnType }
     return result.toString()
   }
 
-  /// Calls the global `matches(input)`; expects a Bool back.
-  func callMatches(_ input: String) throws -> Bool {
-    let result = try call("matches", argument: input)
+  /// Calls the named global predicate function (default `matches`); expects a Bool back.
+  func callMatches(function: String = "matches", _ input: String) throws -> Bool {
+    let result = try call(function, argument: input)
     guard result.isBoolean else { throw JSPluginError.wrongReturnType }
     return result.toBool()
   }
@@ -133,24 +134,28 @@ final class JSPluginRuntime {
   }
 }
 
-/// `@MainActor` ConditionProvider wrapper around a JS runtime's `matches(input)`.
+/// `@MainActor` ConditionProvider wrapper around a JS runtime's predicate function.
+/// `function` defaults to `matches`; multiple providers may share one runtime.
 @MainActor
 struct JSConditionProvider: ConditionProvider {
   let descriptor: ProviderDescriptor
   let runtime: JSPluginRuntime
+  var function: String = "matches"
 
   func evaluate(_ input: PluginInput, params: JSONValue) throws -> Bool {
-    try runtime.callMatches(input.string)
+    try runtime.callMatches(function: function, input.string)
   }
 }
 
-/// `@MainActor` ActionProvider wrapper around a JS runtime's `transform(input)`.
+/// `@MainActor` ActionProvider wrapper around a JS runtime's transform function.
+/// `function` defaults to `transform`; multiple providers may share one runtime.
 @MainActor
 struct JSActionProvider: ActionProvider {
   let descriptor: ProviderDescriptor
   let runtime: JSPluginRuntime
+  var function: String = "transform"
 
   func run(_ input: PluginInput, params: JSONValue) async throws -> ActionOutcome {
-    .replace(try runtime.callTransform(input.string))
+    .replace(try runtime.callTransform(function: function, input.string))
   }
 }

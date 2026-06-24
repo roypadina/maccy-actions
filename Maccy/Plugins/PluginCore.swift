@@ -226,7 +226,42 @@ struct ProviderDescriptor: Identifiable, Hashable {
   let capabilities: [Capability]
   let source: ProviderSource
 
+  /// The id of the package (plugin) this provider belongs to; nil for core
+  /// built-ins, which are not owned by any installable package.
+  let pluginID: String?
+  /// The display name of the owning package; nil for core built-ins.
+  let pluginName: String?
+
   var isVerified: Bool { source.isVerified }
+
+  /// Trailing `pluginID`/`pluginName` default to nil so existing call sites
+  /// (BuiltinProviders, FirstPartyProviders, tests) construct unchanged and
+  /// read as having no owning package.
+  init(
+    id: String,
+    name: String,
+    description: String,
+    longHelp: String?,
+    kind: ProviderKind,
+    engine: ProviderEngine,
+    params: [ParamSpec],
+    capabilities: [Capability],
+    source: ProviderSource,
+    pluginID: String? = nil,
+    pluginName: String? = nil
+  ) {
+    self.id = id
+    self.name = name
+    self.description = description
+    self.longHelp = longHelp
+    self.kind = kind
+    self.engine = engine
+    self.params = params
+    self.capabilities = capabilities
+    self.source = source
+    self.pluginID = pluginID
+    self.pluginName = pluginName
+  }
 }
 
 // MARK: - Protocols

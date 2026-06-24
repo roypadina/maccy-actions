@@ -8,8 +8,28 @@ enum PluginManifestError: Error, Equatable {
   case descriptionTooLong    // description exceeds 120 characters
 }
 
-// MARK: - PluginManifest
+// MARK: - ProviderSpec
 
+/// One provider declared inside a package manifest's `providers` list.
+/// Each keeps its own stable `id` (rules/presets reference provider ids).
+struct ProviderSpec: Codable, Hashable {
+  let id: String
+  let name: String
+  let description: String       // required, <= 120 chars
+  let longHelp: String?
+  let kind: ProviderKind
+  let engine: ProviderEngine    // .declarative or .javascript (never .native in a manifest)
+  let params: [ParamSpec]?
+  let declarative: JSONValue?   // transform op list / predicate tree, iff engine == .declarative
+  let entry: String?            // JS script file, iff engine == .javascript
+  let function: String?         // named JS function to call; default transform/matches by kind
+}
+
+// MARK: - PluginManifest (PACKAGE model)
+
+/// A package manifest: ONE folder + ONE `plugin.json` declaring a LIST of
+/// providers (any mix of conditions and actions). The package id is the
+/// install/manage unit; capabilities are consented once per package.
 struct PluginManifest: Codable, Hashable {
   // MARK: Nested types
 
@@ -20,51 +40,75 @@ struct PluginManifest: Codable, Hashable {
 
   // MARK: Stored properties
 
-  let id: String
+  let id: String                       // PACKAGE id (install/manage unit)
   let name: String
   let version: String
   let author: Author?
-  let description: String      // required, <= 120 chars
+  let description: String              // required, <= 120 chars
   let longHelp: String?
-  let kind: ProviderKind
-  let engine: ProviderEngine   // .declarative or .javascript (never .native in a manifest)
-  let params: [ParamSpec]?
-  let entry: String?           // required iff engine == .javascript
-  let capabilities: [Capability]?
   let minAppVersion: String?
-  let declarative: JSONValue?  // transform op list / predicate tree, iff engine == .declarative
+  let capabilities: [Capability]?      // package-level (one consent per package); default []
+  let providers: [ProviderSpec]
 
   // MARK: Validation
 
-  /// Throws `PluginManifestError` when the manifest is structurally invalid.
-  /// Call before constructing any provider from this manifest.
+  /// Throws `PluginManifestError` when the package or any provider is
+  /// structurally invalid. Call before constructing any provider.
   func validate() throws {
-    // id must be non-empty
     if id.trimmingCharacters(in: .whitespaces).isEmpty {
       throw PluginManifestError.missingField("id")
     }
-    // name must be non-empty
     if name.trimmingCharacters(in: .whitespaces).isEmpty {
       throw PluginManifestError.missingField("name")
     }
-    // version must be non-empty
     if version.trimmingCharacters(in: .whitespaces).isEmpty {
       throw PluginManifestError.missingField("version")
     }
-    // description must be non-empty and at most 120 characters
     if description.trimmingCharacters(in: .whitespaces).isEmpty {
       throw PluginManifestError.missingField("description")
     }
     if description.count > 120 {
       throw PluginManifestError.descriptionTooLong
     }
-    // engine must not be .native (manifests are loaded plugins, never built-in)
-    if engine == .native {
-      throw PluginManifestError.missingField("engine")
+    // capabilities must be a subset of the known set (CaseIterable enum decoding
+    // already rejects unknowns, but guard explicitly for clarity).
+    if let caps = capabilities {
+      let known = Set(Capability.allCases)
+      for cap in caps where !known.contains(cap) {
+        throw PluginManifestError.missingField("capabilities")
+      }
     }
-    // JavaScript plugins require a non-empty entry point
-    if engine == .javascript {
-      guard let e = entry, !e.trimmingCharacters(in: .whitespaces).isEmpty else {
+    if providers.isEmpty {
+      throw PluginManifestError.missingField("providers")
+    }
+    for spec in providers {
+      try Self.validate(spec)
+    }
+  }
+
+  private static func validate(_ spec: ProviderSpec) throws {
+    if spec.id.trimmingCharacters(in: .whitespaces).isEmpty {
+      throw PluginManifestError.missingField("provider.id")
+    }
+    if spec.name.trimmingCharacters(in: .whitespaces).isEmpty {
+      throw PluginManifestError.missingField("provider.name")
+    }
+    if spec.description.trimmingCharacters(in: .whitespaces).isEmpty {
+      throw PluginManifestError.missingField("provider.description")
+    }
+    if spec.description.count > 120 {
+      throw PluginManifestError.descriptionTooLong
+    }
+    switch spec.engine {
+    case .native:
+      // A loaded plugin cannot declare a native provider.
+      throw PluginManifestError.missingField("provider.engine")
+    case .declarative:
+      if spec.declarative == nil {
+        throw PluginManifestError.missingField("provider.declarative")
+      }
+    case .javascript:
+      guard let e = spec.entry, !e.trimmingCharacters(in: .whitespaces).isEmpty else {
         throw PluginManifestError.badEngineEntry
       }
     }
@@ -72,19 +116,23 @@ struct PluginManifest: Codable, Hashable {
 
   // MARK: Descriptor projection
 
-  /// Builds a `ProviderDescriptor` suitable for registering this manifest's provider.
-  /// - Parameter source: where this plugin came from (bundled, marketplace, local folder).
-  func descriptor(source: ProviderSource) -> ProviderDescriptor {
-    ProviderDescriptor(
-      id: id,
-      name: name,
-      description: description,
-      longHelp: longHelp,
-      kind: kind,
-      engine: engine,
-      params: params ?? [],
-      capabilities: capabilities ?? [],
-      source: source
-    )
+  /// Builds one `ProviderDescriptor` per provider, each carrying this package's
+  /// id/name/capabilities.
+  func descriptors(source: ProviderSource) -> [ProviderDescriptor] {
+    providers.map { spec in
+      ProviderDescriptor(
+        id: spec.id,
+        name: spec.name,
+        description: spec.description,
+        longHelp: spec.longHelp,
+        kind: spec.kind,
+        engine: spec.engine,
+        params: spec.params ?? [],
+        capabilities: capabilities ?? [],
+        source: source,
+        pluginID: id,
+        pluginName: name
+      )
+    }
   }
 }

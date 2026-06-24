@@ -186,7 +186,7 @@ final class MarketplaceTests: XCTestCase {
   // MARK: - install writes the folder
 
   func testInstallDeclarativeWritesPluginJSON() async throws {
-    let manifest = #"{"id":"example-base64","name":"Base64 encode","version":"1.0.0","description":"b64","kind":"action","engine":"declarative"}"#
+    let manifest = #"{"id":"example-base64","name":"Base64 encode","version":"1.0.0","description":"b64","providers":[{"id":"example-base64","name":"Base64 encode","description":"b64","kind":"action","engine":"declarative","declarative":{"transform":[]}}]}"#
     let manifestBytes = Data(manifest.utf8)
     MarketplaceResolver.fetch = { _ in (manifestBytes, 200) }
 
@@ -220,7 +220,7 @@ final class MarketplaceTests: XCTestCase {
   func testInstallJavaScriptWritesEntryFile() async throws {
     // engine == javascript with entry "main.js": install must fetch+write both
     // plugin.json and main.js. The stub returns the manifest first, then the JS.
-    let manifest = #"{"id":"example-reverse","name":"Reverse","version":"1.0.0","description":"rev","kind":"condition","engine":"javascript","entry":"main.js"}"#
+    let manifest = #"{"id":"example-reverse","name":"Reverse","version":"1.0.0","description":"rev","providers":[{"id":"example-reverse","name":"Reverse","description":"rev","kind":"condition","engine":"javascript","entry":"main.js"}]}"#
     let manifestBytes = Data(manifest.utf8)
     let jsBytes = Data("function matches(s){return true;}".utf8)
 

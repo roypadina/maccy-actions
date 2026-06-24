@@ -175,9 +175,13 @@ enum MarketplaceResolver {
     let manifestURL = folder.appendingPathComponent("plugin.json")
     try manifestData.write(to: manifestURL, options: .atomic)
 
-    // 4. For a JS plugin, fetch + write the entry script alongside plugin.json.
+    // 4. Fetch + write every distinct JS entry script declared by the package's
+    //    providers, alongside plugin.json.
     let manifest = try JSONDecoder().decode(PluginManifest.self, from: manifestData)
-    if manifest.engine == .javascript, let entryFile = manifest.entry {
+    let entryFiles = Set(manifest.providers.compactMap { spec -> String? in
+      spec.engine == .javascript ? spec.entry : nil
+    })
+    for entryFile in entryFiles {
       let scriptURL = try pluginFileURL(entry, file: entryFile)
       let (scriptData, status) = try await fetch(scriptURL)
       guard status == 200 else { throw MarketplaceError.httpError(status) }

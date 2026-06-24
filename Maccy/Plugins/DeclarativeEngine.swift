@@ -136,24 +136,22 @@ struct DeclarativeConditionProvider: ConditionProvider {
 // MARK: - Factory
 
 enum DeclarativeEngine {
-  /// Builds the declarative provider(s) declared by a manifest.
-  /// Returns one provider on the side matching `manifest.kind`; empty if the
-  /// manifest carries no `declarative` spec.
-  static func makeProviders(
-    manifest: PluginManifest,
-    source: ProviderSource
-  ) -> (conditions: [ConditionProvider], actions: [ActionProvider]) {
-    guard let spec = manifest.declarative else {
-      return (conditions: [], actions: [])
+  /// Builds one declarative provider from a `ProviderSpec` + the descriptor the
+  /// loader has already projected for it (carrying the owning package's id/name).
+  /// Returns it on the side matching `descriptor.kind`; nil when the spec carries
+  /// no inline `declarative` spec.
+  static func makeProvider(
+    spec: ProviderSpec,
+    descriptor: ProviderDescriptor
+  ) -> (condition: ConditionProvider?, action: ActionProvider?) {
+    guard let declarative = spec.declarative else {
+      return (condition: nil, action: nil)
     }
-    let descriptor = manifest.descriptor(source: source)
-    switch manifest.kind {
+    switch descriptor.kind {
     case .condition:
-      let provider = DeclarativeConditionProvider(descriptor: descriptor, spec: spec)
-      return (conditions: [provider], actions: [])
+      return (DeclarativeConditionProvider(descriptor: descriptor, spec: declarative), nil)
     case .action:
-      let provider = DeclarativeActionProvider(descriptor: descriptor, spec: spec)
-      return (conditions: [], actions: [provider])
+      return (nil, DeclarativeActionProvider(descriptor: descriptor, spec: declarative))
     }
   }
 }

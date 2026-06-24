@@ -117,8 +117,14 @@ enum PluginLoader {
     return try loadPlugin(at: folder, source: source, into: .shared)
   }
 
-  // Internal variant used by loadAll: parses, builds, registers, and returns
-  // the descriptor so the caller can log it.
+  // Internal variant used by loadAll: parses the PACKAGE manifest, builds one
+  // provider per ProviderSpec, registers them, and returns their descriptors.
+  //
+  // Failure isolation:
+  //  - an invalid package manifest (bad JSON / failed validate()) throws, so the
+  //    whole package is skipped + logged by the caller;
+  //  - a single bad provider (engine setup failure) is skipped + logged here, but
+  //    its siblings still load.
   @discardableResult
   private static func loadPlugin(
     at folder: URL,
@@ -130,46 +136,60 @@ enum PluginLoader {
     let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
     try manifest.validate()
 
-    let descriptor = manifest.descriptor(source: source)
+    let descriptors = manifest.descriptors(source: source)
 
-    switch manifest.engine {
-    case .native:
-      // A manifest claiming engine=native is rejected; native providers are
-      // code-only and cannot be loaded from a folder plugin.
-      throw PluginManifestError.badEngineEntry
-
-    case .declarative:
-      guard let spec = manifest.declarative else {
-        throw PluginManifestError.missingField("declarative")
-      }
-      switch manifest.kind {
-      case .action:
-        let provider = DeclarativeActionProvider(descriptor: descriptor, spec: spec)
-        registry.register(action: provider)
-      case .condition:
-        let provider = DeclarativeConditionProvider(descriptor: descriptor, spec: spec)
-        registry.register(condition: provider)
-      }
-
-    case .javascript:
-      guard let entryFilename = manifest.entry else {
-        throw PluginManifestError.missingField("entry")
-      }
-      let scriptURL = folder.appendingPathComponent(entryFilename)
+    // Compile one JS runtime per distinct entry file in the package, reused by
+    // every JS provider that names that entry.
+    var runtimes: [String: JSPluginRuntime] = [:]
+    func runtime(forEntry entry: String) throws -> JSPluginRuntime {
+      if let existing = runtimes[entry] { return existing }
+      let scriptURL = folder.appendingPathComponent(entry)
       let script = try String(contentsOf: scriptURL, encoding: .utf8)
       let runtime = try JSPluginRuntime(script: script)
+      runtimes[entry] = runtime
+      return runtime
+    }
 
-      switch manifest.kind {
-      case .condition:
-        let provider = JSConditionProvider(descriptor: descriptor, runtime: runtime)
-        registry.register(condition: provider)
-      case .action:
-        let provider = JSActionProvider(descriptor: descriptor, runtime: runtime)
-        registry.register(action: provider)
+    var registered: [ProviderDescriptor] = []
+    for (spec, descriptor) in zip(manifest.providers, descriptors) {
+      do {
+        switch spec.engine {
+        case .native:
+          // Defensive: validate() already rejects native; never reached.
+          throw PluginManifestError.missingField("provider.engine")
+
+        case .declarative:
+          let built = DeclarativeEngine.makeProvider(spec: spec, descriptor: descriptor)
+          if let action = built.action {
+            registry.register(action: action)
+          } else if let condition = built.condition {
+            registry.register(condition: condition)
+          } else {
+            throw PluginManifestError.missingField("provider.declarative")
+          }
+
+        case .javascript:
+          guard let entry = spec.entry else {
+            throw PluginManifestError.missingField("provider.entry")
+          }
+          let rt = try runtime(forEntry: entry)
+          switch spec.kind {
+          case .condition:
+            let fn = spec.function ?? "matches"
+            registry.register(condition: JSConditionProvider(descriptor: descriptor, runtime: rt, function: fn))
+          case .action:
+            let fn = spec.function ?? "transform"
+            registry.register(action: JSActionProvider(descriptor: descriptor, runtime: rt, function: fn))
+          }
+        }
+        registered.append(descriptor)
+      } catch {
+        // One bad provider is skipped + logged; siblings still load.
+        print("[PluginLoader] Skipping provider \(spec.id) in package \(manifest.id): \(error)")
       }
     }
 
-    return [descriptor]
+    return registered
   }
 
   // MARK: - Source inference
