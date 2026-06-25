@@ -111,7 +111,7 @@ struct PluginsSettingsPane: View {
         }
         ForEach(groups, id: \.package.id) { group in
           PackageGroupView(group: group) {
-            remove(package: group.package)
+            uninstall(package: group.package)
           }
         }
       }
@@ -165,35 +165,22 @@ struct PluginsSettingsPane: View {
     }
   }
 
-  @ViewBuilder
   private func marketplaceRow(_ url: URL) -> some View {
-    if Self.isUnconfiguredOfficial(url) {
-      // The official marketplace placeholder — not yet pointed at a real index.
-      // Show a muted informational row instead of attempting a fetch / red error.
+    VStack(alignment: .leading, spacing: 2) {
       HStack(spacing: 6) {
-        Image(systemName: "star")
+        Image(systemName: "globe")
           .foregroundStyle(.secondary)
-        Text("Official marketplace — not configured yet")
-          .foregroundStyle(.secondary)
+        Text(url.absoluteString)
+          .lineLimit(1)
+          .truncationMode(.middle)
         Spacer()
       }
-    } else {
-      VStack(alignment: .leading, spacing: 2) {
-        HStack(spacing: 6) {
-          Image(systemName: "globe")
-            .foregroundStyle(.secondary)
-          Text(url.absoluteString)
-            .lineLimit(1)
-            .truncationMode(.middle)
-          Spacer()
-        }
-        // Only a genuinely failing USER-ADDED marketplace gets a compact inline warning.
-        if let failure = failedMarketplaces.first(where: { $0.url == url }) {
-          Label(failure.message, systemImage: "exclamationmark.triangle.fill")
-            .font(.caption)
-            .foregroundStyle(.orange)
-            .lineLimit(2)
-        }
+      // A genuinely failing marketplace gets a compact inline warning.
+      if let failure = failedMarketplaces.first(where: { $0.url == url }) {
+        Label(failure.message, systemImage: "exclamationmark.triangle.fill")
+          .font(.caption)
+          .foregroundStyle(.orange)
+          .lineLimit(2)
       }
     }
   }
@@ -226,10 +213,19 @@ struct PluginsSettingsPane: View {
 
             Spacer()
 
-            Button("Install") {
-              install(entry: row.entry, marketplaceID: row.marketplaceID, source: row.source)
+            if isInstalled(row.entry.id) {
+              Text("Installed")
+                .font(.caption)
+                .fontWeight(.semibold)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Color.secondary.opacity(0.15), in: Capsule())
+                .foregroundStyle(.secondary)
+            } else {
+              Button("Install") {
+                install(entry: row.entry, marketplaceID: row.marketplaceID, source: row.source)
+              }
             }
-            .disabled(isInstalled(row.entry.id))
           }
           .padding(.vertical, 2)
         }
@@ -253,6 +249,14 @@ struct PluginsSettingsPane: View {
               .lineLimit(1)
               .truncationMode(.middle)
             Spacer()
+            Button(role: .destructive) {
+              removeLocalFolder(path)
+            } label: {
+              Image(systemName: "trash")
+                .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.borderless)
+            .help("Stop loading plugins from this folder")
           }
         }
         if localFolderPaths.isEmpty {
@@ -433,15 +437,6 @@ struct PluginsSettingsPane: View {
     .sorted { $0.package.name < $1.package.name }
   }
 
-  /// True when `url` is the unconfigured official marketplace placeholder (host
-  /// still contains the "OWNER" token). Such URLs must not be fetched or shown
-  /// as an error — they get a muted "not configured yet" row instead.
-  /// Only matches the known constant, so a user-supplied URL that happens to
-  /// contain "OWNER" is never mistakenly treated as unconfigured.
-  static func isUnconfiguredOfficial(_ url: URL) -> Bool {
-    url == kMaccayOfficialMarketplaceURL && url.absoluteString.contains("OWNER")
-  }
-
   // MARK: - Derived data
 
   private struct AvailableRow {
@@ -518,8 +513,6 @@ struct PluginsSettingsPane: View {
     var loaded: [Marketplace] = []
     var failures: [(url: URL, message: String)] = []
     for url in store.registeredMarketplaceURLs() {
-      // The unconfigured official placeholder is never fetched.
-      if Self.isUnconfiguredOfficial(url) { continue }
       do {
         loaded.append(try await MarketplaceResolver.fetchIndex(url))
       } catch {
@@ -549,6 +542,14 @@ struct PluginsSettingsPane: View {
   }
 
   private func install(entry: MarketplaceEntry, marketplaceID: String, source: ProviderSource) {
+    // A previously disabled (uninstalled) package is re-enabled in place — its
+    // files are still on disk, so no download or consent prompt is needed.
+    if store.disabledPlugins().contains(entry.id) {
+      store.enablePlugin(id: entry.id)
+      reloadDescriptors()
+      return
+    }
+
     let declared = capabilitiesDeclared(by: entry)
     if Self.requiresConsent(
       declared: declared,
@@ -575,8 +576,8 @@ struct PluginsSettingsPane: View {
   private func performInstall(entry: MarketplaceEntry, marketplaceID: String) {
     Task {
       do {
+        // store.install reloads providers (with the disabled set applied).
         try await store.install(entry, marketplaceID: marketplaceID)
-        PluginLoader.loadAll(into: registry, extraFolders: store.localFolders())
         reloadDescriptors()
         installError = nil
       } catch {
@@ -585,12 +586,21 @@ struct PluginsSettingsPane: View {
     }
   }
 
-  /// Removes an installed package (marketplace/local source only). `remove(pluginID:)`
-  /// takes the installed-folder id, which equals the package id.
-  private func remove(package: PluginPackage) {
-    store.remove(pluginID: package.id)
-    capabilities.revokeAll(pluginID: package.id)
-    PluginLoader.loadAll(into: registry, extraFolders: store.localFolders())
+  /// Uninstalls a package. Bundled packages live in the read-only app bundle and
+  /// can't be deleted, so they're disabled (re-enabling reloads them); downloaded
+  /// marketplace packages are deleted. Both paths reload providers via the store
+  /// (with the disabled set applied). Local packages are managed per-folder in the
+  /// Local folders section, so they have no per-package uninstall here.
+  private func uninstall(package: PluginPackage) {
+    switch package.source {
+    case .bundled:
+      store.disablePlugin(id: package.id)
+    case .marketplace:
+      store.remove(pluginID: package.id)
+      capabilities.revokeAll(pluginID: package.id)
+    case .local, .builtin:
+      return
+    }
     reloadDescriptors()
   }
 
@@ -601,7 +611,13 @@ struct PluginsSettingsPane: View {
     panel.allowsMultipleSelection = false
     guard panel.runModal() == .OK, let url = panel.url else { return }
     store.addLocalFolder(url)
-    PluginLoader.loadAll(into: registry, extraFolders: store.localFolders())
+    ActionEngine.shared.reloadRules()
+    reloadDescriptors()
+  }
+
+  /// Removes a local dev folder; the store reloads providers (disabled set applied).
+  private func removeLocalFolder(_ path: String) {
+    store.removeLocalFolder(URL(fileURLWithPath: path))
     reloadDescriptors()
   }
 
@@ -691,7 +707,7 @@ private struct ProviderRowView: View {
 /// providers listed beneath, plus a Remove button for removable sources.
 private struct PackageGroupView: View {
   let group: PluginsSettingsPane.PluginGroup
-  let onRemove: () -> Void
+  let onUninstall: () -> Void
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
@@ -703,9 +719,9 @@ private struct PackageGroupView: View {
           unverifiedBadge
         }
         Spacer()
-        if isRemovable {
-          Button(role: .destructive, action: onRemove) {
-            Label("Remove", systemImage: "trash")
+        if showsUninstall {
+          Button(role: .destructive, action: onUninstall) {
+            Label("Uninstall", systemImage: "trash")
               .font(.caption)
           }
           .buttonStyle(.borderless)
@@ -723,10 +739,12 @@ private struct PackageGroupView: View {
     .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
   }
 
-  private var isRemovable: Bool {
+  // Bundled packages disable in place; marketplace packages delete. Local
+  // packages are managed per-folder in the Local folders section.
+  private var showsUninstall: Bool {
     switch group.package.source {
-    case .marketplace, .local: return true
-    case .builtin, .bundled:   return false
+    case .bundled, .marketplace: return true
+    case .local, .builtin:       return false
     }
   }
 

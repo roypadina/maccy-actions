@@ -65,25 +65,6 @@ final class PluginsSettingsLogicTests: XCTestCase {
     )
   }
 
-  // MARK: - isUnconfiguredOfficial
-
-  // The known official placeholder (contains "OWNER") → true.
-  func testOfficialPlaceholderIsUnconfigured() {
-    XCTAssertTrue(PluginsSettingsPane.isUnconfiguredOfficial(kMaccayOfficialMarketplaceURL))
-  }
-
-  // A user-supplied URL that happens to contain "OWNER" → false (not the known constant).
-  func testUserURLContainingOWNERIsNotUnconfigured() {
-    let userURL = URL(string: "https://example.com/OWNER/marketplace.json")!
-    XCTAssertFalse(PluginsSettingsPane.isUnconfiguredOfficial(userURL))
-  }
-
-  // The official URL with OWNER replaced by a real name → false (already configured).
-  func testConfiguredOfficialURLIsNotUnconfigured() {
-    let configured = URL(string: "https://maccay-team.github.io/maccay-plugins/marketplace.json")!
-    XCTAssertFalse(PluginsSettingsPane.isUnconfiguredOfficial(configured))
-  }
-
   // MARK: - Grouping helpers
 
   // A core built-in (no owning package).

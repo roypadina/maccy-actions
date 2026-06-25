@@ -165,6 +165,20 @@ class HistoryItem {
     return NSImage(data: data)
   }
 
+  // Cheap "does this item carry image data?" — mirrors `imageData != nil` WITHOUT
+  // decoding an NSImage. Used on the hot render path (value classification,
+  // thumbnail guards) where decoding every visible row's image just to test
+  // existence is the dominant cost when opening the popup.
+  var hasImageData: Bool {
+    if contents.contains(where: { [.tiff, .png, .jpeg, .heic].contains(NSPasteboard.PasteboardType($0.type)) }) {
+      return true
+    }
+    if universalClipboardImage, let url = fileURLs.first {
+      return (try? Data(contentsOf: url)) != nil
+    }
+    return false
+  }
+
   var rtfData: Data? { contentData([.rtf]) }
   var rtf: NSAttributedString? {
     guard let data = rtfData else {

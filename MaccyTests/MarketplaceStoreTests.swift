@@ -8,18 +8,22 @@ final class MarketplaceStoreTests: XCTestCase {
   // Save and restore Defaults keys around every test so tests are isolated.
   private var savedMarketplaces: [String] = []
   private var savedLocalFolders: [String] = []
+  private var savedDisabled: [String] = []
 
   override func setUp() async throws {
     try await super.setUp()
     savedMarketplaces = Defaults[.installedMarketplaces]
     savedLocalFolders = Defaults[.localMarketplaceFolders]
+    savedDisabled = Defaults[.disabledPlugins]
     Defaults[.installedMarketplaces] = []
     Defaults[.localMarketplaceFolders] = []
+    Defaults[.disabledPlugins] = []
   }
 
   override func tearDown() async throws {
     Defaults[.installedMarketplaces] = savedMarketplaces
     Defaults[.localMarketplaceFolders] = savedLocalFolders
+    Defaults[.disabledPlugins] = savedDisabled
     try await super.tearDown()
   }
 
@@ -146,6 +150,52 @@ final class MarketplaceStoreTests: XCTestCase {
     let store = MarketplaceStore()
     // Should not throw or crash.
     store.remove(pluginID: "com.example.does-not-exist")
+  }
+
+  // MARK: - Enable / disable plugins
+
+  func testDisablePluginPersistsID() {
+    let store = MarketplaceStore()
+    store.disablePlugin(id: "com.example.bundled")
+    XCTAssertTrue(store.disabledPlugins().contains("com.example.bundled"))
+    XCTAssertTrue(Defaults[.disabledPlugins].contains("com.example.bundled"))
+  }
+
+  func testDisablePluginDeduplicates() {
+    let store = MarketplaceStore()
+    store.disablePlugin(id: "com.example.bundled")
+    store.disablePlugin(id: "com.example.bundled")
+    XCTAssertEqual(Defaults[.disabledPlugins].filter { $0 == "com.example.bundled" }.count, 1)
+  }
+
+  func testEnablePluginRemovesID() {
+    let store = MarketplaceStore()
+    store.disablePlugin(id: "com.example.bundled")
+    store.enablePlugin(id: "com.example.bundled")
+    XCTAssertFalse(store.disabledPlugins().contains("com.example.bundled"))
+  }
+
+  func testEnablePluginNoOpWhenNotDisabled() {
+    let store = MarketplaceStore()
+    // Should not crash or add anything.
+    store.enablePlugin(id: "com.example.never-disabled")
+    XCTAssertFalse(store.disabledPlugins().contains("com.example.never-disabled"))
+  }
+
+  // MARK: - removeLocalFolder
+
+  func testRemoveLocalFolderRemovesFromDefaults() {
+    let store = MarketplaceStore()
+    let url = URL(fileURLWithPath: "/tmp/dev-plugins")
+    Defaults[.localMarketplaceFolders] = [url.path]
+    store.removeLocalFolder(url)
+    XCTAssertFalse(Defaults[.localMarketplaceFolders].contains(url.path))
+  }
+
+  func testRemoveLocalFolderSilentlySucceedsForUnknownFolder() {
+    let store = MarketplaceStore()
+    // Should not throw or crash.
+    store.removeLocalFolder(URL(fileURLWithPath: "/tmp/not-registered"))
   }
 
   // MARK: - kMaccayOfficialMarketplaceURL

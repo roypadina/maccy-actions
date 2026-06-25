@@ -1,12 +1,9 @@
 import Foundation
 import Defaults
 
-// The official Maccay plugin marketplace index.
-// TODO(OWNER): replace the placeholder host with the real maccay-plugins GitHub Pages URL
-// once the maccay-plugins repo is created and approved (Milestone D).
-// The URL must point to a raw marketplace.json served over HTTPS.
+// The official Maccay plugin marketplace index, served as raw marketplace.json over HTTPS.
 let kMaccayOfficialMarketplaceURL = URL(
-  string: "https://OWNER.github.io/maccay-plugins/marketplace.json"
+  string: "https://raw.githubusercontent.com/roypadina/maccay-plugins/main/marketplace.json"
 )!
 
 // Manages the set of registered marketplace URLs and local plugin folders.
@@ -114,6 +111,34 @@ final class MarketplaceStore {
     ActionEngine.shared.reloadRules()
   }
 
+  // MARK: - Enable / disable plugins
+
+  /// Package ids the user has disabled. Bundled packages cannot be deleted (they
+  /// live in the read-only app bundle), so "uninstalling" one disables it: the
+  /// loader skips any package whose id is in this set.
+  func disabledPlugins() -> [String] {
+    Defaults[.disabledPlugins]
+  }
+
+  /// Disables (uninstalls) the package with `id` and reloads so it stops loading.
+  /// No-op if already disabled.
+  func disablePlugin(id: String) {
+    var ids = Defaults[.disabledPlugins]
+    guard !ids.contains(id) else { return }
+    ids.append(id)
+    Defaults[.disabledPlugins] = ids
+    ActionEngine.shared.reloadRules()
+  }
+
+  /// Re-enables (reinstalls) a previously disabled package by `id` and reloads.
+  /// No-op if not currently disabled.
+  func enablePlugin(id: String) {
+    let ids = Defaults[.disabledPlugins]
+    guard ids.contains(id) else { return }
+    Defaults[.disabledPlugins] = ids.filter { $0 != id }
+    ActionEngine.shared.reloadRules()
+  }
+
   // MARK: - Local folders
 
   /// Returns the local plugin folder URLs stored in Defaults.
@@ -128,6 +153,16 @@ final class MarketplaceStore {
     guard !stored.contains(path) else { return }
     stored.append(path)
     Defaults[.localMarketplaceFolders] = stored
+  }
+
+  /// Removes a local folder from Defaults (by path) and reloads so its plugins
+  /// stop loading. Silently does nothing if the folder isn't registered.
+  func removeLocalFolder(_ url: URL) {
+    let path = url.path
+    let stored = Defaults[.localMarketplaceFolders]
+    guard stored.contains(path) else { return }
+    Defaults[.localMarketplaceFolders] = stored.filter { $0 != path }
+    ActionEngine.shared.reloadRules()
   }
 
   // MARK: - Testing support

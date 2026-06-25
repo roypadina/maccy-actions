@@ -79,7 +79,7 @@ struct HistoryItemView: View {
   }
 
   private var rowActions: [RowActionItem] {
-    ActionEngine.shared.resolvedActions(for: item.item).enumerated().map { index, action in
+    item.resolvedActions.enumerated().map { index, action in
       RowActionItem(
         id: action.id,
         title: index == 0 ? "\(action.title) (default)" : action.title,

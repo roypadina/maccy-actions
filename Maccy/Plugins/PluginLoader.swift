@@ -39,9 +39,15 @@ enum PluginLoader {
   /// resulting providers into `registry`.
   ///
   /// Call at app startup and again from `ActionEngine.reloadRules()`.
-  /// Pass `MarketplaceStore.shared.localFolders()` as `extraFolders` once C2 lands;
-  /// for now pass `[]`.
-  static func loadAll(into registry: ProviderRegistry, extraFolders: [URL]) {
+  /// Pass `MarketplaceStore.shared.localFolders()` as `extraFolders`.
+  /// `disabledPluginIDs` are package ids the user has uninstalled: any package
+  /// whose manifest id is in the set is skipped (used for bundled packages that
+  /// can't be deleted from the read-only app bundle).
+  static func loadAll(
+    into registry: ProviderRegistry,
+    extraFolders: [URL],
+    disabledPluginIDs: Set<String> = []
+  ) {
     // Remove every provider that came from a folder source so stale plugins
     // from a previous load cycle cannot linger after their folder is deleted.
     // .builtin providers (registered by BuiltinProviders) are left in place —
@@ -64,7 +70,7 @@ enum PluginLoader {
     folders.append(contentsOf: extraFolders)
 
     for folder in folders {
-      scanFolder(folder, into: registry)
+      scanFolder(folder, into: registry, disabledPluginIDs: disabledPluginIDs)
     }
   }
 
@@ -72,7 +78,11 @@ enum PluginLoader {
 
   /// Enumerates immediate subdirectories of `folder`; each subdirectory that
   /// contains a `plugin.json` is treated as one plugin.
-  private static func scanFolder(_ folder: URL, into registry: ProviderRegistry) {
+  private static func scanFolder(
+    _ folder: URL,
+    into registry: ProviderRegistry,
+    disabledPluginIDs: Set<String> = []
+  ) {
     guard FileManager.default.fileExists(atPath: folder.path) else { return }
 
     let contents: [URL]
@@ -99,7 +109,7 @@ enum PluginLoader {
       guard FileManager.default.fileExists(atPath: manifestURL.path) else { continue }
 
       do {
-        _ = try loadPlugin(at: entry, source: source, into: registry)
+        _ = try loadPlugin(at: entry, source: source, into: registry, disabledPluginIDs: disabledPluginIDs)
       } catch {
         print("[PluginLoader] Skipping plugin at \(entry.lastPathComponent): \(error)")
       }
@@ -131,12 +141,19 @@ enum PluginLoader {
   private static func loadPlugin(
     at folder: URL,
     source: ProviderSource,
-    into registry: ProviderRegistry
+    into registry: ProviderRegistry,
+    disabledPluginIDs: Set<String> = []
   ) throws -> [ProviderDescriptor] {
     let manifestURL = folder.appendingPathComponent("plugin.json")
     let data = try Data(contentsOf: manifestURL)
     let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
     try manifest.validate()
+
+    // A package the user has uninstalled (disabled) is parsed but not registered.
+    // It stays on disk; re-enabling reloads it.
+    if disabledPluginIDs.contains(manifest.id) {
+      return []
+    }
 
     let descriptors = manifest.descriptors(source: source)
 

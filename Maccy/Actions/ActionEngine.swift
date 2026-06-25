@@ -34,6 +34,13 @@ final class ActionEngine {
   // second init (or an explicit registerProviders() call) is a cheap no-op.
   private var providersRegistered = false
 
+  // Bumps whenever the resolved-actions inputs change — rule edits (Settings UI
+  // or CLI) and provider reloads (plugin install/uninstall). HistoryItemDecorator
+  // caches resolvedActions keyed on this so it isn't recomputed on every render.
+  private(set) var actionsGeneration = 0
+
+  @ObservationIgnored private var rulesObserver: Defaults.Observation?
+
   private init() {
     registerProviders()
   }
@@ -47,11 +54,20 @@ final class ActionEngine {
   func registerProviders() {
     guard !providersRegistered else { return }
     providersRegistered = true
+    // Catch in-process rule writes (the Settings pane binds @Default(.actionRules)
+    // directly, bypassing reloadRules). Cross-process CLI writes bump via reloadRules.
+    rulesObserver = Defaults.observe(.actionRules) { [weak self] _ in
+      Task { @MainActor in self?.actionsGeneration += 1 }
+    }
     BuiltinProviders.registerBuiltins(into: .shared)
     // Load folder plugins (bundled + Application Support + user local folders).
     // The bundled packages supply the com.maccay.* condition/action ids that
-    // presets reference.
-    PluginLoader.loadAll(into: .shared, extraFolders: MarketplaceStore.shared.localFolders())
+    // presets reference. Packages the user has uninstalled are skipped.
+    PluginLoader.loadAll(
+      into: .shared,
+      extraFolders: MarketplaceStore.shared.localFolders(),
+      disabledPluginIDs: Set(MarketplaceStore.shared.disabledPlugins())
+    )
   }
 
   var rules: [ActionRule] { Defaults[.actionRules] }
@@ -98,10 +114,13 @@ final class ActionEngine {
   // system image). Surfaces the popup right-click menu, ⌃1…⌃9, and the slideout
   // Actions list.
   func resolvedActions(for item: HistoryItem) -> [RowActionItem] {
+    // Classify the item once and reuse it for matching (matchingRules would
+    // otherwise re-run the same expensive classification).
     let input = makeInput(from: item)
+    let matched = rules.filter { $0.enabled && matches($0, input: input) }
     var seen = Set<String>()
     var result: [RowActionItem] = []
-    for rule in matchingRules(for: item) {
+    for rule in matched {
       for config in rule.actions {
         guard let descriptor = ProviderRegistry.shared.action(config.provider)?.descriptor else {
           continue
@@ -197,9 +216,15 @@ final class ActionEngine {
   // UserDefaults cache so `rules` (computed from `Defaults`) sees the fresh
   // value on the next copy automatically.
   func reloadRules() {
+    actionsGeneration += 1
     CFPreferencesAppSynchronize(kCFPreferencesCurrentApplication)
-    // Reload folder plugins (bundled + Application Support + user local folders).
-    PluginLoader.loadAll(into: .shared, extraFolders: MarketplaceStore.shared.localFolders())
+    // Reload folder plugins (bundled + Application Support + user local folders),
+    // skipping packages the user has uninstalled.
+    PluginLoader.loadAll(
+      into: .shared,
+      extraFolders: MarketplaceStore.shared.localFolders(),
+      disabledPluginIDs: Set(MarketplaceStore.shared.disabledPlugins())
+    )
     registerShortcuts()
   }
 

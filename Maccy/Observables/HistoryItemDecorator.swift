@@ -39,7 +39,27 @@ class HistoryItemDecorator: Identifiable, Hashable, HasVisibility {
     return url.deletingPathExtension().lastPathComponent
   }
 
-  var hasImage: Bool { item.image != nil }
+  var hasImage: Bool { item.hasImageData }
+
+  // Memoized resolved actions for this item's row menu. resolvedActions is
+  // expensive (value classification + rule matching); recomputing it on every
+  // SwiftUI render of every visible row is the dominant popup-open cost. Cache it,
+  // invalidated when ActionEngine bumps actionsGeneration (rule/provider changes).
+  // Reading actionsGeneration here also makes views re-render when it changes.
+  @ObservationIgnored private var cachedResolvedActions: [RowActionItem]?
+  @ObservationIgnored private var cachedActionsGeneration = -1
+
+  @MainActor
+  var resolvedActions: [RowActionItem] {
+    let generation = ActionEngine.shared.actionsGeneration
+    if generation == cachedActionsGeneration, let cached = cachedResolvedActions {
+      return cached
+    }
+    let actions = ActionEngine.shared.resolvedActions(for: item)
+    cachedResolvedActions = actions
+    cachedActionsGeneration = generation
+    return actions
+  }
 
   var previewImageGenerationTask: Task<(), Error>?
   var thumbnailImageGenerationTask: Task<(), Error>?
@@ -74,7 +94,7 @@ class HistoryItemDecorator: Identifiable, Hashable, HasVisibility {
 
   @MainActor
   func ensureThumbnailImage() {
-    guard item.image != nil else {
+    guard item.hasImageData else {
       return
     }
     guard thumbnailImage == nil else {
@@ -90,7 +110,7 @@ class HistoryItemDecorator: Identifiable, Hashable, HasVisibility {
 
   @MainActor
   func ensurePreviewImage() {
-    guard item.image != nil else {
+    guard item.hasImageData else {
       return
     }
     guard previewImage == nil else {

@@ -64,4 +64,7 @@ extension Defaults.Keys {
   static let installedMarketplaces   = Key<[String]>("installedMarketplaces", default: [])
   static let localMarketplaceFolders = Key<[String]>("localMarketplaceFolders", default: [])
   static let pluginCapabilityGrants  = Key<[String: [Capability]]>("pluginCapabilityGrants", default: [:])
+  // Package ids the user has uninstalled but cannot delete from disk (bundled
+  // packages live in the read-only app bundle). Skipped at load until re-enabled.
+  static let disabledPlugins         = Key<[String]>("disabledPlugins", default: [])
 }

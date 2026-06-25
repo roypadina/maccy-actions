@@ -42,7 +42,12 @@ enum ActionsCLI {
   private static func registerProviders() {
     MainActor.assumeIsolated {
       BuiltinProviders.registerBuiltins(into: .shared)
-      PluginLoader.loadAll(into: .shared, extraFolders: MarketplaceStore.shared.localFolders())
+      // Skip packages the user uninstalled, so the CLI catalog matches the app.
+      PluginLoader.loadAll(
+        into: .shared,
+        extraFolders: MarketplaceStore.shared.localFolders(),
+        disabledPluginIDs: Set(MarketplaceStore.shared.disabledPlugins())
+      )
     }
   }
 

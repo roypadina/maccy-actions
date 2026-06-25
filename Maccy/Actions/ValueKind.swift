@@ -59,7 +59,7 @@ enum ValueClassifier {
   static func kinds(of item: HistoryItem) -> Set<ValueKind> {
     var result: Set<ValueKind> = []
 
-    if item.image != nil {
+    if item.hasImageData {
       result.insert(.image)
     }
 

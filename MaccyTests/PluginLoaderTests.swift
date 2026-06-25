@@ -158,6 +158,26 @@ final class PluginLoaderTests: XCTestCase {
     XCTAssertEqual(descriptor.engine, .declarative)
   }
 
+  // A package whose id is in the disabled set is parsed but not registered;
+  // clearing the set re-registers it. (Uninstall = disable for bundled packages.)
+  func testDisabledPackageIsSkipped() throws {
+    let registry = ProviderRegistry()
+    let root = FileManager.default.temporaryDirectory
+      .appendingPathComponent("PluginLoaderTests-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    _ = try makeDeclarativePlugin(id: "test.disabled", in: root)
+
+    // Disabled by package id ("<id>.pkg") → provider is not registered.
+    PluginLoader.loadAll(into: registry, extraFolders: [root], disabledPluginIDs: ["test.disabled.pkg"])
+    XCTAssertNil(registry.action("test.disabled"), "Disabled package must not register its providers")
+
+    // Re-enable (empty disabled set) → provider registers normally.
+    PluginLoader.loadAll(into: registry, extraFolders: [root])
+    XCTAssertNotNil(registry.action("test.disabled"), "Re-enabled package should register again")
+  }
+
   func testDeclarativeActionRunsTransform() async throws {
     let registry = ProviderRegistry()
     let root = FileManager.default.temporaryDirectory
