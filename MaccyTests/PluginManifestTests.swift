@@ -451,11 +451,11 @@ final class PluginManifestTests: XCTestCase {
     }
     """
     let manifest = try PluginManifest.from(json)
-    let descriptor = manifest.descriptors(source: .marketplace("maccay-official"))[0]
+    let descriptor = manifest.descriptors(source: .marketplace("maccyplus-official"))[0]
     XCTAssertEqual(descriptor.id, "com.example.reverse")
     XCTAssertEqual(descriptor.kind, .condition)
     XCTAssertEqual(descriptor.engine, .javascript)
-    XCTAssertEqual(descriptor.source, .marketplace("maccay-official"))
+    XCTAssertEqual(descriptor.source, .marketplace("maccyplus-official"))
     XCTAssertTrue(descriptor.isVerified)
     XCTAssertEqual(descriptor.capabilities, [.fileRead])   // package-level
     XCTAssertEqual(descriptor.params.count, 1)

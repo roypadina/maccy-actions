@@ -1,9 +1,9 @@
 import Foundation
 import Defaults
 
-// The official Maccay plugin marketplace index, served as raw marketplace.json over HTTPS.
-let kMaccayOfficialMarketplaceURL = URL(
-  string: "https://raw.githubusercontent.com/roypadina/maccay-plugins/main/marketplace.json"
+// The official MaccyPlus plugin marketplace index, served as raw marketplace.json over HTTPS.
+let kMaccyPlusOfficialMarketplaceURL = URL(
+  string: "https://raw.githubusercontent.com/roypadina/MaccyPlus-Plugins/main/marketplace.json"
 )!
 
 // Manages the set of registered marketplace URLs and local plugin folders.
@@ -29,8 +29,8 @@ final class MarketplaceStore {
     let stored = Defaults[.installedMarketplaces].compactMap { URL(string: $0) }
     // Prepend official, deduplicate by absolute string.
     var seen = Set<String>()
-    seen.insert(kMaccayOfficialMarketplaceURL.absoluteString)
-    var result: [URL] = [kMaccayOfficialMarketplaceURL]
+    seen.insert(kMaccyPlusOfficialMarketplaceURL.absoluteString)
+    var result: [URL] = [kMaccyPlusOfficialMarketplaceURL]
     for url in stored where seen.insert(url.absoluteString).inserted {
       result.append(url)
     }

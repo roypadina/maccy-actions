@@ -114,7 +114,7 @@ final class CapabilityManagerTests: XCTestCase {
 
   func testIsUnverifiedFalseForOfficialMarketplace() {
     let cm = CapabilityManager()
-    XCTAssertFalse(cm.isUnverified(.marketplace("maccay-official")))
+    XCTAssertFalse(cm.isUnverified(.marketplace("maccyplus-official")))
   }
 
   func testIsUnverifiedTrueForUnknownMarketplace() {

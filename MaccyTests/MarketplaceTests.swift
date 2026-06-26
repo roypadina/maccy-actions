@@ -43,8 +43,8 @@ final class MarketplaceTests: XCTestCase {
     let data = try marketplaceFixtureData()
     let marketplace = try JSONDecoder().decode(Marketplace.self, from: data)
 
-    XCTAssertEqual(marketplace.id, "maccay-official")
-    XCTAssertEqual(marketplace.name, "Maccay Official")
+    XCTAssertEqual(marketplace.id, "maccyplus-official")
+    XCTAssertEqual(marketplace.name, "MaccyPlus Official")
     XCTAssertEqual(marketplace.version, "1")
     XCTAssertEqual(marketplace.plugins.count, 2)
 
@@ -56,7 +56,7 @@ final class MarketplaceTests: XCTestCase {
     guard case let .github(repo, ref, path) = base64.source else {
       return XCTFail("expected github source, got \(base64.source)")
     }
-    XCTAssertEqual(repo, "royp/maccay-plugins")
+    XCTAssertEqual(repo, "royp/MaccyPlus-Plugins")
     XCTAssertEqual(ref, "main")
     XCTAssertEqual(path, "plugins/example-base64")
 
@@ -72,7 +72,7 @@ final class MarketplaceTests: XCTestCase {
   // MARK: - PluginSource Codable round-trip
 
   func testPluginSourceGithubRoundTrip() throws {
-    let original = PluginSource.github(repo: "royp/maccay-plugins", ref: "v1.2.0", path: "plugins/foo")
+    let original = PluginSource.github(repo: "royp/MaccyPlus-Plugins", ref: "v1.2.0", path: "plugins/foo")
     let data = try JSONEncoder().encode(original)
     let decoded = try JSONDecoder().decode(PluginSource.self, from: data)
     XCTAssertEqual(decoded, original)
@@ -86,7 +86,7 @@ final class MarketplaceTests: XCTestCase {
   }
 
   func testPluginSourceGithubNilPathRoundTrip() throws {
-    let original = PluginSource.github(repo: "royp/maccay-plugins", ref: "main", path: nil)
+    let original = PluginSource.github(repo: "royp/MaccyPlus-Plugins", ref: "main", path: nil)
     let data = try JSONEncoder().encode(original)
     let decoded = try JSONDecoder().decode(PluginSource.self, from: data)
     XCTAssertEqual(decoded, original)
@@ -119,7 +119,7 @@ final class MarketplaceTests: XCTestCase {
     let marketplace = try await MarketplaceResolver.fetchIndex(
       URL(string: "https://plugins.example.com/marketplace.json")!
     )
-    XCTAssertEqual(marketplace.id, "maccay-official")
+    XCTAssertEqual(marketplace.id, "maccyplus-official")
     XCTAssertEqual(marketplace.plugins.count, 2)
   }
 
@@ -198,7 +198,7 @@ final class MarketplaceTests: XCTestCase {
       minAppVersion: nil,
       kind: .action,
       tags: nil,
-      source: .github(repo: "royp/maccay-plugins", ref: "main", path: "plugins/example-base64"),
+      source: .github(repo: "royp/MaccyPlus-Plugins", ref: "main", path: "plugins/example-base64"),
       sha256: sha256(manifest)
     )
 
@@ -207,7 +207,7 @@ final class MarketplaceTests: XCTestCase {
     defer { try? FileManager.default.removeItem(at: dir) }
 
     let folder = try await MarketplaceResolver.install(
-      entry, marketplaceID: "maccay-official", into: dir
+      entry, marketplaceID: "maccyplus-official", into: dir
     )
 
     XCTAssertEqual(folder.lastPathComponent, "example-base64")
@@ -248,7 +248,7 @@ final class MarketplaceTests: XCTestCase {
     defer { try? FileManager.default.removeItem(at: dir) }
 
     let folder = try await MarketplaceResolver.install(
-      entry, marketplaceID: "maccay-official", into: dir
+      entry, marketplaceID: "maccyplus-official", into: dir
     )
 
     let pluginJSON = folder.appendingPathComponent("plugin.json")

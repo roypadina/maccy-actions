@@ -66,7 +66,19 @@ All output is pretty JSON on stdout. Errors go to stderr with a non-zero exit;
 "$BIN" terminals add <bundleid>        # add one (deduped)
 "$BIN" terminals remove <bundleid>     # remove one
 "$BIN" terminals reset                 # back to built-in defaults
+
+"$BIN" plugins list                    # JSON: packages, disabled ids, local folders, marketplace URLs
+"$BIN" plugins enable  <package-id>    # toggle a package on
+"$BIN" plugins disable <package-id>    # toggle a package off
+
+"$BIN" folders list                    # registered local plugin folders
+"$BIN" folders add    <path>           # register a folder (use after building a plugin)
+"$BIN" folders remove <path>           # unregister a folder
 ```
+
+> **Note:** Marketplace install/uninstall (fetching a package from a remote URL) is
+> **GUI-only** (Settings → Plugins). It involves async network I/O that the CLI does
+> not expose. Use `folders add` to register plugins you build locally.
 
 `<input>` for `add` / `update` / `import` is one of:
 - `--json '<json>'`  (preferred for agents)
@@ -77,7 +89,105 @@ All output is pretty JSON on stdout. Errors go to stderr with a non-zero exit;
 
 `add`/`update` take a single rule **object**; `import` takes a rule **array**.
 
-## 4. Rule JSON schema
+## 4. Plugin & folder management
+
+### `plugins list` output shape
+
+```jsonc
+{
+  "packages": [                    // all loaded packages (built-ins + plugins)
+    {"id": "com.maccyplus.terminal-source", "name": "Terminal Source", "enabled": true},
+    ...
+  ],
+  "disabledIds": ["com.example.my-plugin"],
+  "localFolders": ["/Users/me/dev/my-plugin"],
+  "marketplaceURLs": ["https://raw.githubusercontent.com/roypadina/MaccyPlus-Plugins/main/marketplace.json"]
+}
+```
+
+### Enable / disable a package
+```bash
+"$BIN" plugins disable com.maccyplus.soft-wrap
+"$BIN" plugins enable  com.maccyplus.soft-wrap
+```
+
+### Register / unregister a local plugin folder
+
+After building or downloading a plugin folder, register it so MaccyPlus loads it:
+```bash
+"$BIN" folders add /Users/me/dev/my-plugin     # app reloads immediately if running
+"$BIN" folders list                            # verify it appeared
+"$BIN" folders remove /Users/me/dev/my-plugin  # unregister
+```
+
+### Plugin folder structure
+
+A plugin is a **plain folder** with at minimum a `plugin.json` manifest:
+
+```
+my-plugin/
+  plugin.json         # required manifest
+  src/my-action.js    # required only for JavaScript providers
+```
+
+Minimal `plugin.json`:
+```jsonc
+{
+  "id": "com.example.my-plugin",   // reverse-domain, unique
+  "name": "My Plugin",
+  "version": "1.0.0",
+  "description": "What it does.",
+  "capabilities": ["action"],      // ["condition"], ["action"], or both
+  "providers": [
+    {
+      "id": "com.example.my-plugin.my-action",
+      "name": "My Action",
+      "description": "Transforms the clipboard value.",
+      "kind": "action",
+      "engine": "javascript",      // or "declarative"
+      "entry": "src/my-action.js"  // path relative to plugin folder (JS only)
+    }
+  ]
+}
+```
+
+**JavaScript engine constraints:** The sandbox has no network, no filesystem, no
+timers, and a ~250 ms watchdog. Export `transform(text)` (action) or
+`matches(input)` (condition). Anything outside that API is unavailable.
+
+**Declarative engine:** Specify a JSON transform pipeline or predicate tree
+instead of an `entry` file. No code required.
+
+### Marketplace structure (for publishing)
+
+A marketplace is a public git repo with a `marketplace.json` at the root:
+
+```jsonc
+{
+  "id": "com.example.my-marketplace",
+  "name": "My Marketplace",
+  "plugins": [
+    {
+      "id": "com.example.my-plugin",
+      "name": "My Plugin",
+      "version": "1.0.0",
+      "kind": "action",
+      "source": {
+        "type": "github",
+        "repo": "example/my-marketplace",
+        "ref": "main",
+        "path": "plugins/my-plugin"
+      },
+      "sha256": "<sha256 of that plugin's plugin.json>"
+    }
+  ]
+}
+```
+
+The official marketplace is **roypadina/MaccyPlus-Plugins** (pre-loaded in the app).
+Full authoring and publishing guides live in that repo's `docs/`.
+
+## 5. Rule JSON schema
 
 ```jsonc
 {
@@ -147,7 +257,7 @@ A per-action shortcut runs **that specific action** on the current clipboard,
 from the rule-level **global default shortcut** (set in the GUI), which runs the
 highest-priority matching rule's default action.
 
-## 5. Recipes
+## 6. Recipes
 
 ### Create the "unwrap terminal command" rule (auto on copy)
 Fires only when a copy comes from a terminal app **and** shows the soft-wrap
@@ -188,7 +298,40 @@ Fetch the rule, set the action's `shortcut`, pipe it back via stdin (sandbox-saf
 "$BIN" terminals reset
 ```
 
-## 6. Notes & gotchas
+### Build and register a plugin (agent recipe)
+
+1. Write the plugin folder (e.g. `~/dev/my-plugin/`) with `plugin.json` and any
+   `.js` entry files (see section 4 for the schema).
+2. Register the folder — the running app reloads immediately:
+   ```bash
+   "$BIN" folders add ~/dev/my-plugin
+   ```
+3. Verify it loaded:
+   ```bash
+   "$BIN" plugins list | python3 -c 'import sys,json; pkgs=json.load(sys.stdin)["packages"]; [print(p["id"],p["enabled"]) for p in pkgs]'
+   ```
+4. Enable or disable as needed:
+   ```bash
+   "$BIN" plugins enable  com.example.my-plugin
+   "$BIN" plugins disable com.example.my-plugin
+   ```
+
+Human path: **Settings → Plugins → Local folders → Add folder**, then toggle in the
+same panel.
+
+### Build a marketplace (agent recipe)
+
+1. Create a public GitHub repo (e.g. `my-org/my-marketplace`).
+2. Add a `marketplace.json` at the repo root (see section 4 for the schema).
+3. Place each plugin's folder under `plugins/<plugin-id>/`.
+4. Compute the `sha256` of each plugin's `plugin.json` and record it in
+   `marketplace.json`.
+5. Direct users to add the raw `marketplace.json` URL in **Settings → Plugins →
+   Marketplaces**. The CLI does not manage marketplace URLs — that is GUI-only.
+
+Full authoring guides: see the `docs/` folder in **roypadina/MaccyPlus-Plugins**.
+
+## 7. Notes & gotchas
 
 - **Quote the binary path** — it contains a space.
 - `add`/`update`/`import` **validate before writing**: a bad `transform`/`regex`/

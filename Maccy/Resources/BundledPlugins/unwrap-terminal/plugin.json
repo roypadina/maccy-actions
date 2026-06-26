@@ -1,13 +1,13 @@
 {
-  "id": "com.maccay.unwrap-terminal",
+  "id": "com.maccyplus.unwrap-terminal",
   "name": "Unwrap terminal command",
   "version": "1.0.0",
-  "author": { "name": "Maccay" },
+  "author": { "name": "MaccyPlus" },
   "description": "Detects terminal-copied, soft-wrapped text and joins it back into one line.",
   "capabilities": [],
   "providers": [
     {
-      "id": "com.maccay.terminal-source",
+      "id": "com.maccyplus.terminal-source",
       "name": "Terminal source",
       "description": "Matches when the text was copied from a known terminal (Terminal, iTerm2, Warp, kitty, Ghostty, VS Code, and more).",
       "longHelp": "Matches the copy source against a baked-in list of terminal bundle IDs: Apple Terminal, iTerm2, Warp, kitty, Alacritty, WezTerm, Ghostty, and VS Code. Pair it with Soft-wrapped text to unwrap only command output.",
@@ -29,7 +29,7 @@
       }
     },
     {
-      "id": "com.maccay.soft-wrap",
+      "id": "com.maccyplus.soft-wrap",
       "name": "Soft-wrapped text",
       "description": "Matches fixed-width line wraps: every line but the last shares length L >= 40 and the last is shorter.",
       "longHelp": "Heuristic for terminal soft-wrapping: if every line except the last has the same length L (with L at least 40) and the final line is shorter, the text was almost certainly wrapped at a fixed column rather than hard-broken on purpose.",
@@ -39,7 +39,7 @@
       "function": "matchesSoftWrap"
     },
     {
-      "id": "com.maccay.unwrap",
+      "id": "com.maccyplus.unwrap",
       "name": "Unwrap (join wrapped lines)",
       "description": "Joins soft-wrapped terminal output into one line: deletes wrap newlines, else collapses each newline run to one space.",
       "longHelp": "Rejoins wrapped text into single lines. When the input looks fixed-width soft-wrapped, the wrap newlines are deleted outright; otherwise each run of newlines is collapsed to a single space so paragraphs stay separated.",

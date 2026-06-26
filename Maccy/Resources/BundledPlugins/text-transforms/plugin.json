@@ -1,13 +1,13 @@
 {
-  "id": "com.maccay.text-transforms",
+  "id": "com.maccyplus.text-transforms",
   "name": "Text transforms",
   "version": "1.0.0",
-  "author": { "name": "Maccay" },
+  "author": { "name": "MaccyPlus" },
   "description": "Everyday clipboard text transforms: trim, UPPERCASE, lowercase, strip formatting, and fix keyboard layout.",
   "capabilities": [],
   "providers": [
     {
-      "id": "com.maccay.trim",
+      "id": "com.maccyplus.trim",
       "name": "Trim whitespace",
       "description": "Removes leading and trailing whitespace and newlines from the clipboard text.",
       "longHelp": "Strips whitespace and newline characters from both ends of the text, leaving the interior untouched. Useful for cleaning up values copied with stray leading or trailing spaces.",
@@ -16,7 +16,7 @@
       "declarative": { "transform": [ { "op": "trim" } ] }
     },
     {
-      "id": "com.maccay.uppercase",
+      "id": "com.maccyplus.uppercase",
       "name": "UPPERCASE",
       "description": "Converts the clipboard text to uppercase.",
       "longHelp": "Maps every letter to its uppercase form using the system locale rules. Non-letter characters are left unchanged.",
@@ -25,7 +25,7 @@
       "declarative": { "transform": [ { "op": "case", "value": "upper" } ] }
     },
     {
-      "id": "com.maccay.lowercase",
+      "id": "com.maccyplus.lowercase",
       "name": "lowercase",
       "description": "Converts the clipboard text to lowercase.",
       "longHelp": "Maps every letter to its lowercase form using the system locale rules. Non-letter characters are left unchanged.",
@@ -34,7 +34,7 @@
       "declarative": { "transform": [ { "op": "case", "value": "lower" } ] }
     },
     {
-      "id": "com.maccay.strip-formatting",
+      "id": "com.maccyplus.strip-formatting",
       "name": "Strip formatting",
       "description": "Strips rich text formatting from the clipboard, leaving only the plain text.",
       "longHelp": "Replaces the clipboard contents with their plain-text representation, discarding fonts, colors, and other rich-text styling so the text pastes cleanly into any field.",
@@ -43,7 +43,7 @@
       "declarative": { "transform": [] }
     },
     {
-      "id": "com.maccay.fix-keyboard-layout",
+      "id": "com.maccyplus.fix-keyboard-layout",
       "name": "Fix keyboard layout (EN ⇄ HE)",
       "description": "Corrects text typed in the wrong layout by re-mapping between US-QWERTY and Israeli SI-1452. Direction auto-detected.",
       "longHelp": "Re-maps text typed with the wrong active layout between US-QWERTY (English) and Israeli SI-1452 (Hebrew). The direction is detected automatically from the characters present, so the same action fixes both EN→HE and HE→EN mistakes.",

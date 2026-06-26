@@ -141,6 +141,11 @@ BIN="$APP/Contents/MacOS/MaccyPlus"
 "$BIN" rules list              # all rules as JSON
 "$BIN" rules add  --json '…'   # create a rule (also: get/update/remove/move/enable/disable/import)
 "$BIN" terminals list          # the terminal-app list (also: add/remove/reset)
+"$BIN" plugins list            # packages, disabled ids, local folders, marketplace URLs
+"$BIN" plugins enable  <id>    # toggle a package on  (also: disable)
+"$BIN" folders list            # registered local plugin folders
+"$BIN" folders add    <path>   # register a folder — use this after building a plugin
+"$BIN" folders remove <path>   # unregister a folder
 ```
 
 All commands take and emit JSON and validate input before writing. For the full schema,
@@ -159,14 +164,22 @@ own. A plugin is a folder with a `plugin.json` manifest declaring one or more pr
 * **JavaScript** — a small sandboxed script (no network, no filesystem, no timers; ~250 ms
   watchdog) that returns the transformed string or a boolean.
 
-Manage them under **Settings → Plugins**: browse a marketplace, **install** / **uninstall**
-packages, read each provider's description, and add **local folders** during development.
-The first-party plugins (terminal unwrap, text transforms, …) ship bundled and can be
-disabled like any other.
+**GUI path:** Manage plugins under **Settings → Plugins**: browse a marketplace,
+**install** / **uninstall** packages, read each provider's description, enable/disable
+individual packages, and add **local folders** during development. The first-party plugins
+(terminal unwrap, text transforms, …) ship bundled and can be disabled like any other.
+Marketplace install and uninstall are GUI-only — they involve async network I/O that the
+CLI does not expose.
+
+**Agent / CLI path:** Build a plugin as a folder with a `plugin.json` manifest (and
+optional `.js` entry files), then register it with `"$BIN" folders add <path>`. The
+running app reloads immediately. Use `"$BIN" plugins enable/disable <id>` to toggle
+packages. See [`.claude/skills/maccyplus/SKILL.md`](.claude/skills/maccyplus/SKILL.md)
+for the full plugin schema and a step-by-step agent recipe.
 
 The official marketplace lives at
-**[roypadina/maccay-plugins](https://github.com/roypadina/maccay-plugins)** — see its README
-and docs for how to author and publish your own.
+**[roypadina/MaccyPlus-Plugins](https://github.com/roypadina/MaccyPlus-Plugins)** — see
+its `docs/` for how to author and publish your own.
 
 ## Advanced
 

@@ -42,9 +42,9 @@ final class KeyboardLayoutTests: XCTestCase {
     ProviderRegistry.shared.reset()
     BuiltinProviders.registerBuiltins(into: .shared)
     _ = try PluginLoader.loadPlugin(at: Self.textTransformsURL, source: .bundled)
-    let provider = ProviderRegistry.shared.action("com.maccay.fix-keyboard-layout")
+    let provider = ProviderRegistry.shared.action("com.maccyplus.fix-keyboard-layout")
     XCTAssertNotNil(provider)
-    XCTAssertEqual(provider?.descriptor.id, "com.maccay.fix-keyboard-layout")
+    XCTAssertEqual(provider?.descriptor.id, "com.maccyplus.fix-keyboard-layout")
   }
 
   // Resolve the bundled text-transforms package from the source tree via
@@ -52,7 +52,7 @@ final class KeyboardLayoutTests: XCTestCase {
   private static let textTransformsURL: URL = {
     let thisFile = URL(fileURLWithPath: #filePath)       // .../MaccyTests/KeyboardLayoutTests.swift
     let testsDir = thisFile.deletingLastPathComponent()  // .../MaccyTests/
-    let repoRoot = testsDir.deletingLastPathComponent()  // .../Maccay/
+    let repoRoot = testsDir.deletingLastPathComponent()  // .../MaccyPlus/
     return repoRoot
       .appendingPathComponent("Maccy")
       .appendingPathComponent("Resources")

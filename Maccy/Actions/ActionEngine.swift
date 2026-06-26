@@ -48,7 +48,7 @@ final class ActionEngine {
   // Idempotently register the native built-in providers, then load folder
   // plugins. Built-ins: builtin.kind/regex/contains/sourceApp +
   // builtin.openURL/openInApp/webSearch/runShortcut. The former native
-  // first-party providers (com.maccay.soft-wrap/terminal-source/unwrap + the
+  // first-party providers (com.maccyplus.soft-wrap/terminal-source/unwrap + the
   // text transforms) now ship as bundled package plugins under
   // Resources/BundledPlugins, loaded by PluginLoader.loadAll below.
   func registerProviders() {
@@ -61,7 +61,7 @@ final class ActionEngine {
     }
     BuiltinProviders.registerBuiltins(into: .shared)
     // Load folder plugins (bundled + Application Support + user local folders).
-    // The bundled packages supply the com.maccay.* condition/action ids that
+    // The bundled packages supply the com.maccyplus.* condition/action ids that
     // presets reference. Packages the user has uninstalled are skipped.
     PluginLoader.loadAll(
       into: .shared,

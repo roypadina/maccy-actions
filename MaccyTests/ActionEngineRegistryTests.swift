@@ -5,11 +5,11 @@ import XCTest
 final class ActionEngineRegistryTests: XCTestCase {
 
   // Resolve the bundled unwrap-terminal package from the source tree via
-  // #filePath so com.maccay.unwrap resolves without a packaged app bundle.
+  // #filePath so com.maccyplus.unwrap resolves without a packaged app bundle.
   private static let unwrapTerminalURL: URL = {
     let thisFile = URL(fileURLWithPath: #filePath)       // .../MaccyTests/ActionEngineRegistryTests.swift
     let testsDir = thisFile.deletingLastPathComponent()  // .../MaccyTests/
-    let repoRoot = testsDir.deletingLastPathComponent()  // .../Maccay/
+    let repoRoot = testsDir.deletingLastPathComponent()  // .../MaccyPlus/
     return repoRoot
       .appendingPathComponent("Maccy")
       .appendingPathComponent("Resources")
@@ -22,7 +22,7 @@ final class ActionEngineRegistryTests: XCTestCase {
     ProviderRegistry.shared.reset()
     BuiltinProviders.registerBuiltins(into: .shared)
     // The former native first-party providers now ship as bundled packages;
-    // load unwrap-terminal so com.maccay.unwrap resolves.
+    // load unwrap-terminal so com.maccyplus.unwrap resolves.
     _ = try PluginLoader.loadPlugin(at: Self.unwrapTerminalURL, source: .bundled)
   }
 
@@ -53,7 +53,7 @@ final class ActionEngineRegistryTests: XCTestCase {
       sourceAppBundleID: nil,
       fileURLs: []
     )
-    let provider = try XCTUnwrap(ProviderRegistry.shared.action("com.maccay.unwrap"))
+    let provider = try XCTUnwrap(ProviderRegistry.shared.action("com.maccyplus.unwrap"))
     let outcome = try await provider.run(input, params: .emptyObject)
     XCTAssertEqual(outcome, .replace(TextUnwrap.unwrap(theString)))
   }

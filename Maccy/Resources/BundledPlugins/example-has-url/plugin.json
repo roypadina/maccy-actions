@@ -1,13 +1,13 @@
 {
-  "id": "com.maccay.example-has-url",
+  "id": "com.maccyplus.example-has-url",
   "name": "Has URL",
   "version": "1.0.0",
-  "author": { "name": "Maccay" },
+  "author": { "name": "MaccyPlus" },
   "description": "True when the clipboard text contains an http or https URL.",
   "capabilities": [],
   "providers": [
     {
-      "id": "com.maccay.example.has-url",
+      "id": "com.maccyplus.example.has-url",
       "name": "Has URL",
       "description": "True when the clipboard text contains an http or https URL.",
       "kind": "condition",

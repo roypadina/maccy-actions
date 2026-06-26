@@ -1,8 +1,8 @@
 {
-  "id": "maccay-official",
-  "name": "Maccay Official",
+  "id": "maccyplus-official",
+  "name": "MaccyPlus Official",
   "version": "1",
-  "description": "First-party Maccay plugins",
+  "description": "First-party MaccyPlus plugins",
   "maintainer": "royp",
   "plugins": [
     {
@@ -15,7 +15,7 @@
       "tags": ["encoding", "text"],
       "source": {
         "type": "github",
-        "repo": "royp/maccay-plugins",
+        "repo": "royp/MaccyPlus-Plugins",
         "ref": "main",
         "path": "plugins/example-base64"
       },

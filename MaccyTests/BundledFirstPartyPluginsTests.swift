@@ -13,7 +13,7 @@ final class BundledFirstPartyPluginsTests: XCTestCase {
   private static let bundledPluginsURL: URL = {
     let thisFile = URL(fileURLWithPath: #filePath)       // .../MaccyTests/BundledFirstPartyPluginsTests.swift
     let testsDir = thisFile.deletingLastPathComponent()  // .../MaccyTests/
-    let repoRoot = testsDir.deletingLastPathComponent()  // .../Maccay/
+    let repoRoot = testsDir.deletingLastPathComponent()  // .../MaccyPlus/
     return repoRoot
       .appendingPathComponent("Maccy")
       .appendingPathComponent("Resources")
@@ -58,7 +58,7 @@ final class BundledFirstPartyPluginsTests: XCTestCase {
   // MARK: - soft-wrap condition (JS port) == TextUnwrap.isSoftWrapped
 
   func testSoftWrapMatchesSwiftOracle() throws {
-    let condition = try XCTUnwrap(ProviderRegistry.shared.condition("com.maccay.soft-wrap"))
+    let condition = try XCTUnwrap(ProviderRegistry.shared.condition("com.maccyplus.soft-wrap"))
     for sample in softWrapSamples {
       let jsResult = try condition.evaluate(input(sample), params: .emptyObject)
       let swiftResult = TextUnwrap.isSoftWrapped(sample)
@@ -69,7 +69,7 @@ final class BundledFirstPartyPluginsTests: XCTestCase {
   // MARK: - unwrap action (JS port) == .replace(TextUnwrap.unwrap)
 
   func testUnwrapMatchesSwiftOracle() async throws {
-    let action = try XCTUnwrap(ProviderRegistry.shared.action("com.maccay.unwrap"))
+    let action = try XCTUnwrap(ProviderRegistry.shared.action("com.maccyplus.unwrap"))
     // The empty string would throw noValue in JS too; skip it for the action path.
     for sample in softWrapSamples where !sample.isEmpty {
       let outcome = try await action.run(input(sample), params: .emptyObject)
@@ -81,7 +81,7 @@ final class BundledFirstPartyPluginsTests: XCTestCase {
   // MARK: - fix-keyboard-layout action (JS port) == .replace(KeyboardLayoutFixer.fix)
 
   func testFixKeyboardLayoutMatchesSwiftOracle() async throws {
-    let action = try XCTUnwrap(ProviderRegistry.shared.action("com.maccay.fix-keyboard-layout"))
+    let action = try XCTUnwrap(ProviderRegistry.shared.action("com.maccyplus.fix-keyboard-layout"))
     let samples = [
       "akuo",                 // EN→HE → "שלום"
       "שלום",                  // HE→EN → "akuo"
@@ -101,7 +101,7 @@ final class BundledFirstPartyPluginsTests: XCTestCase {
   }
 
   func testFixKeyboardLayoutKnownPairs() async throws {
-    let action = try XCTUnwrap(ProviderRegistry.shared.action("com.maccay.fix-keyboard-layout"))
+    let action = try XCTUnwrap(ProviderRegistry.shared.action("com.maccyplus.fix-keyboard-layout"))
     let enToHe = try await action.run(input("akuo"), params: .emptyObject)
     XCTAssertEqual(enToHe, .replace("שלום"))
     let heToEn = try await action.run(input("שלום"), params: .emptyObject)
@@ -111,7 +111,7 @@ final class BundledFirstPartyPluginsTests: XCTestCase {
   // MARK: - terminal-source condition (declarative)
 
   func testTerminalSourceTrueForKnownApp() throws {
-    let condition = try XCTUnwrap(ProviderRegistry.shared.condition("com.maccay.terminal-source"))
+    let condition = try XCTUnwrap(ProviderRegistry.shared.condition("com.maccyplus.terminal-source"))
     for bundleID in TerminalApps.defaults {
       XCTAssertTrue(
         try condition.evaluate(input("anything", sourceApp: bundleID), params: .emptyObject),
@@ -121,14 +121,14 @@ final class BundledFirstPartyPluginsTests: XCTestCase {
   }
 
   func testTerminalSourceFalseForUnknownApp() throws {
-    let condition = try XCTUnwrap(ProviderRegistry.shared.condition("com.maccay.terminal-source"))
+    let condition = try XCTUnwrap(ProviderRegistry.shared.condition("com.maccyplus.terminal-source"))
     XCTAssertFalse(
       try condition.evaluate(input("anything", sourceApp: "com.example.NotATerminal"), params: .emptyObject)
     )
   }
 
   func testTerminalSourceFalseForNilApp() throws {
-    let condition = try XCTUnwrap(ProviderRegistry.shared.condition("com.maccay.terminal-source"))
+    let condition = try XCTUnwrap(ProviderRegistry.shared.condition("com.maccyplus.terminal-source"))
     XCTAssertFalse(
       try condition.evaluate(input("anything", sourceApp: nil), params: .emptyObject)
     )
@@ -137,25 +137,25 @@ final class BundledFirstPartyPluginsTests: XCTestCase {
   // MARK: - text-transforms declarative actions
 
   func testTrimAction() async throws {
-    let action = try XCTUnwrap(ProviderRegistry.shared.action("com.maccay.trim"))
+    let action = try XCTUnwrap(ProviderRegistry.shared.action("com.maccyplus.trim"))
     let outcome = try await action.run(input("  hello world  "), params: .emptyObject)
     XCTAssertEqual(outcome, .replace("hello world"))
   }
 
   func testUppercaseAction() async throws {
-    let action = try XCTUnwrap(ProviderRegistry.shared.action("com.maccay.uppercase"))
+    let action = try XCTUnwrap(ProviderRegistry.shared.action("com.maccyplus.uppercase"))
     let outcome = try await action.run(input("hello"), params: .emptyObject)
     XCTAssertEqual(outcome, .replace("HELLO"))
   }
 
   func testLowercaseAction() async throws {
-    let action = try XCTUnwrap(ProviderRegistry.shared.action("com.maccay.lowercase"))
+    let action = try XCTUnwrap(ProviderRegistry.shared.action("com.maccyplus.lowercase"))
     let outcome = try await action.run(input("HELLO"), params: .emptyObject)
     XCTAssertEqual(outcome, .replace("hello"))
   }
 
   func testStripFormattingAction() async throws {
-    let action = try XCTUnwrap(ProviderRegistry.shared.action("com.maccay.strip-formatting"))
+    let action = try XCTUnwrap(ProviderRegistry.shared.action("com.maccyplus.strip-formatting"))
     let outcome = try await action.run(input("hello"), params: .emptyObject)
     XCTAssertEqual(outcome, .replace("hello"))
   }
@@ -163,23 +163,23 @@ final class BundledFirstPartyPluginsTests: XCTestCase {
   // MARK: - Package membership (descriptor.pluginID == owning package)
 
   func testUnwrapTerminalPackageMembership() {
-    let ids = ["com.maccay.terminal-source", "com.maccay.soft-wrap"]
+    let ids = ["com.maccyplus.terminal-source", "com.maccyplus.soft-wrap"]
     for id in ids {
       let descriptor = ProviderRegistry.shared.condition(id)?.descriptor
-      XCTAssertEqual(descriptor?.pluginID, "com.maccay.unwrap-terminal", "wrong pluginID for \(id)")
+      XCTAssertEqual(descriptor?.pluginID, "com.maccyplus.unwrap-terminal", "wrong pluginID for \(id)")
     }
-    let unwrap = ProviderRegistry.shared.action("com.maccay.unwrap")?.descriptor
-    XCTAssertEqual(unwrap?.pluginID, "com.maccay.unwrap-terminal")
+    let unwrap = ProviderRegistry.shared.action("com.maccyplus.unwrap")?.descriptor
+    XCTAssertEqual(unwrap?.pluginID, "com.maccyplus.unwrap-terminal")
   }
 
   func testTextTransformsPackageMembership() {
     let ids = [
-      "com.maccay.trim", "com.maccay.uppercase", "com.maccay.lowercase",
-      "com.maccay.strip-formatting", "com.maccay.fix-keyboard-layout",
+      "com.maccyplus.trim", "com.maccyplus.uppercase", "com.maccyplus.lowercase",
+      "com.maccyplus.strip-formatting", "com.maccyplus.fix-keyboard-layout",
     ]
     for id in ids {
       let descriptor = ProviderRegistry.shared.action(id)?.descriptor
-      XCTAssertEqual(descriptor?.pluginID, "com.maccay.text-transforms", "wrong pluginID for \(id)")
+      XCTAssertEqual(descriptor?.pluginID, "com.maccyplus.text-transforms", "wrong pluginID for \(id)")
     }
   }
 }

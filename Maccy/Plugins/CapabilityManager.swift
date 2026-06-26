@@ -44,7 +44,7 @@ extension Capability: Defaults.Serializable {}
   }
 
   /// Returns `true` when the plugin source is not considered verified.
-  /// Builtin and bundled sources are always verified. `marketplace("maccay-official")`
+  /// Builtin and bundled sources are always verified. `marketplace("maccyplus-official")`
   /// is the single verified remote marketplace. Local-folder and all other marketplace
   /// sources are unverified and trigger the "Unverified source" badge in the GUI.
   func isUnverified(_ source: ProviderSource) -> Bool {

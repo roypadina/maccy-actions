@@ -94,7 +94,7 @@ final class PluginsSettingsLogicTests: XCTestCase {
   func testBuiltinsKeepsOnlyPackagelessProviders() {
     let descriptors = [
       builtin("builtin.regex", "Matches regex"),
-      pluginProvider("com.maccay.trim", "Trim", packageID: "com.maccay.text-transforms", packageName: "Text transforms"),
+      pluginProvider("com.maccyplus.trim", "Trim", packageID: "com.maccyplus.text-transforms", packageName: "Text transforms"),
       builtin("builtin.kind", "Is a kind of value")
     ]
     let result = PluginsSettingsPane.builtins(descriptors)
@@ -105,26 +105,26 @@ final class PluginsSettingsLogicTests: XCTestCase {
   func testGroupedPluginsExcludesBuiltins() {
     let descriptors = [
       builtin("builtin.regex", "Matches regex"),
-      pluginProvider("com.maccay.trim", "Trim", packageID: "com.maccay.text-transforms", packageName: "Text transforms")
+      pluginProvider("com.maccyplus.trim", "Trim", packageID: "com.maccyplus.text-transforms", packageName: "Text transforms")
     ]
     let groups = PluginsSettingsPane.groupedPlugins(descriptors)
     XCTAssertEqual(groups.count, 1)
-    XCTAssertEqual(groups.first?.package.id, "com.maccay.text-transforms")
+    XCTAssertEqual(groups.first?.package.id, "com.maccyplus.text-transforms")
     XCTAssertFalse(groups.flatMap(\.providers).contains { $0.id == "builtin.regex" })
   }
 
   // Providers sharing a pluginID land under one package; providers within sorted by name.
   func testGroupedPluginsGroupsByPackage() {
     let descriptors = [
-      pluginProvider("com.maccay.unwrap", "Unwrap", packageID: "com.maccay.unwrap-terminal", packageName: "Unwrap terminal", kind: .action),
-      pluginProvider("com.maccay.terminal-source", "Terminal source", packageID: "com.maccay.unwrap-terminal", packageName: "Unwrap terminal", kind: .condition),
-      pluginProvider("com.maccay.soft-wrap", "Soft-wrapped text", packageID: "com.maccay.unwrap-terminal", packageName: "Unwrap terminal", kind: .condition),
-      pluginProvider("com.maccay.trim", "Trim", packageID: "com.maccay.text-transforms", packageName: "Text transforms")
+      pluginProvider("com.maccyplus.unwrap", "Unwrap", packageID: "com.maccyplus.unwrap-terminal", packageName: "Unwrap terminal", kind: .action),
+      pluginProvider("com.maccyplus.terminal-source", "Terminal source", packageID: "com.maccyplus.unwrap-terminal", packageName: "Unwrap terminal", kind: .condition),
+      pluginProvider("com.maccyplus.soft-wrap", "Soft-wrapped text", packageID: "com.maccyplus.unwrap-terminal", packageName: "Unwrap terminal", kind: .condition),
+      pluginProvider("com.maccyplus.trim", "Trim", packageID: "com.maccyplus.text-transforms", packageName: "Text transforms")
     ]
     let groups = PluginsSettingsPane.groupedPlugins(descriptors)
     // Two packages, sorted by package name ("Text transforms" < "Unwrap terminal").
     XCTAssertEqual(groups.map(\.package.name), ["Text transforms", "Unwrap terminal"])
-    let unwrap = groups.first { $0.package.id == "com.maccay.unwrap-terminal" }
+    let unwrap = groups.first { $0.package.id == "com.maccyplus.unwrap-terminal" }
     XCTAssertEqual(unwrap?.providers.count, 3)
     // Providers within a package sorted by name.
     XCTAssertEqual(unwrap?.providers.map(\.name), ["Soft-wrapped text", "Terminal source", "Unwrap"])

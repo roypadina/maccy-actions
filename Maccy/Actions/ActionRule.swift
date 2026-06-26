@@ -14,14 +14,14 @@ enum MatchMode: String, Codable, CaseIterable, Identifiable {
 // A single condition referencing a provider by id.
 struct RuleCondition: Codable, Identifiable, Hashable {
   var id: UUID = UUID()
-  var provider: String                 // e.g. "builtin.kind", "com.maccay.soft-wrap"
+  var provider: String                 // e.g. "builtin.kind", "com.maccyplus.soft-wrap"
   var params: JSONValue = .object([:])
 }
 
 // Persisted configuration for one action within a rule.
 struct ActionConfig: Codable, Identifiable, Hashable {
   var id: UUID = UUID()
-  var provider: String                 // e.g. "builtin.openURL", "com.maccay.unwrap"
+  var provider: String                 // e.g. "builtin.openURL", "com.maccyplus.unwrap"
   var params: JSONValue = .object([:])
   var shortcut: String?                // per-action keyboard shortcut, e.g. "cmd+shift+u"
 
@@ -109,17 +109,17 @@ struct ActionRule: Codable, Identifiable, Hashable, Defaults.Serializable {
       matchMode: .all,
       conditions: [
         RuleCondition(
-          provider: "com.maccay.terminal-source",
+          provider: "com.maccyplus.terminal-source",
           params: .emptyObject
         ),
         RuleCondition(
-          provider: "com.maccay.soft-wrap",
+          provider: "com.maccyplus.soft-wrap",
           params: .emptyObject
         )
       ],
       actions: [
         ActionConfig(
-          provider: "com.maccay.unwrap",
+          provider: "com.maccyplus.unwrap",
           params: .emptyObject
         )
       ],

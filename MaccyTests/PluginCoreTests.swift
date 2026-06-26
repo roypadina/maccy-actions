@@ -32,7 +32,7 @@ final class PluginCoreTests: XCTestCase {
   func testProviderSourceIsVerified() {
     XCTAssertTrue(ProviderSource.builtin.isVerified)
     XCTAssertTrue(ProviderSource.bundled.isVerified)
-    XCTAssertTrue(ProviderSource.marketplace("maccay-official").isVerified)
+    XCTAssertTrue(ProviderSource.marketplace("maccyplus-official").isVerified)
     XCTAssertFalse(ProviderSource.marketplace("some-other-marketplace").isVerified)
     XCTAssertFalse(ProviderSource.local("/Users/alice/plugins/myplugin").isVerified)
   }
@@ -54,7 +54,7 @@ final class PluginCoreTests: XCTestCase {
   }
 
   func testProviderSourceCodableMarketplace() throws {
-    let v = ProviderSource.marketplace("maccay-official")
+    let v = ProviderSource.marketplace("maccyplus-official")
     let data = try JSONEncoder().encode(v)
     let decoded = try JSONDecoder().decode(ProviderSource.self, from: data)
     XCTAssertEqual(decoded, v)

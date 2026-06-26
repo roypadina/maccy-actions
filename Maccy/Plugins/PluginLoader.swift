@@ -15,7 +15,7 @@ enum PluginLoader {
     Bundle.main.url(forResource: "BundledPlugins", withExtension: nil)
   }
 
-  /// `~/Library/Application Support/Maccay/Plugins` — created on demand.
+  /// `~/Library/Application Support/MaccyPlus/Plugins` — created on demand.
   static func installedPluginsURL() -> URL {
     let appSupport = FileManager.default.urls(
       for: .applicationSupportDirectory,
@@ -23,7 +23,7 @@ enum PluginLoader {
     ).first ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
 
     let dir = appSupport
-      .appendingPathComponent("Maccay", isDirectory: true)
+      .appendingPathComponent("MaccyPlus", isDirectory: true)
       .appendingPathComponent("Plugins", isDirectory: true)
 
     if !FileManager.default.fileExists(atPath: dir.path) {

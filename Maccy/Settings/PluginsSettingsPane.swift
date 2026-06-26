@@ -96,7 +96,7 @@ struct PluginsSettingsPane: View {
       .padding(6)
     } label: {
       sectionHeader("Built-in", count: Self.builtins(allDescriptors).count,
-                    help: "Core conditions and actions that ship with Maccay. Always available.")
+                    help: "Core conditions and actions that ship with MaccyPlus. Always available.")
     }
   }
 
@@ -307,7 +307,7 @@ struct PluginsSettingsPane: View {
       .padding(.vertical, 2)
       .background(Color.orange.opacity(0.2), in: Capsule())
       .foregroundStyle(.orange)
-      .help("This plugin comes from a source Maccay can't verify. Review its requested capabilities before installing.")
+      .help("This plugin comes from a source MaccyPlus can't verify. Review its requested capabilities before installing.")
   }
 
   // MARK: - Add-marketplace sheet
@@ -775,7 +775,7 @@ private struct PackageGroupView: View {
       .padding(.vertical, 2)
       .background(Color.orange.opacity(0.2), in: Capsule())
       .foregroundStyle(.orange)
-      .help("This plugin comes from a source Maccay can't verify.")
+      .help("This plugin comes from a source MaccyPlus can't verify.")
   }
 }
 

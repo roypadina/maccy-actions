@@ -152,7 +152,7 @@ enum ProviderSource: Codable, Hashable {
   var isVerified: Bool {
     switch self {
     case .builtin, .bundled:         return true
-    case .marketplace(let id):       return id == "maccay-official"
+    case .marketplace(let id):       return id == "maccyplus-official"
     case .local:                     return false
     }
   }

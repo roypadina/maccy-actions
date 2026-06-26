@@ -21,13 +21,15 @@ enum ActionsCLI {
     registerProviders()
 
     guard let namespace = args.first else {
-      return fail("Missing command. Expected 'rules' or 'terminals'.")
+      return fail("Missing command. Expected 'rules', 'terminals', 'plugins', or 'folders'.")
     }
     let rest = Array(args.dropFirst())
     switch namespace {
     case "rules": return runRules(rest)
     case "terminals": return runTerminals(rest)
-    default: return fail("Unknown command: \(namespace). Expected 'rules' or 'terminals'.")
+    case "plugins": return runPlugins(rest)
+    case "folders": return runFolders(rest)
+    default: return fail("Unknown command: \(namespace). Expected 'rules', 'terminals', 'plugins', or 'folders'.")
     }
   }
 
@@ -35,7 +37,7 @@ enum ActionsCLI {
   // packages + Application Support + user local folders) into the shared registry
   // so the headless CLI's `describe` catalog (and any registry-backed validation)
   // matches the running app. The former native first-party providers
-  // (com.maccay.soft-wrap/terminal-source/unwrap + text transforms) now ship as
+  // (com.maccyplus.soft-wrap/terminal-source/unwrap + text transforms) now ship as
   // bundled package plugins, picked up by PluginLoader.loadAll. `ProviderRegistry`
   // is @MainActor; the CLI has no run loop, so we enter the actor synchronously
   // (same pattern AppDelegate uses for the distributed-notification reload).
@@ -277,6 +279,106 @@ enum ActionsCLI {
     var list = Defaults[.terminalAppBundleIDs]
     list.removeAll { $0 == bundleID }
     Defaults[.terminalAppBundleIDs] = list
+    postChanged()
+    return emit(list)
+  }
+
+  // MARK: plugins
+
+  // Manage installed plugin packages. `list` reports the live registry (built-ins +
+  // loaded plugin packages) plus disabled ids, local folders, and marketplace URLs.
+  // `enable`/`disable` toggle a package id in Defaults[.disabledPlugins] — the loader
+  // skips disabled packages. Marketplace install/uninstall stays in the GUI (async).
+  private static func runPlugins(_ args: [String]) -> Int32 {
+    guard let sub = args.first else {
+      return fail("Missing plugins subcommand (list, enable, disable).")
+    }
+    let rest = Array(args.dropFirst())
+    switch sub {
+    case "list": return pluginsList()
+    case "enable": return pluginsSetDisabled(rest, disabled: false)
+    case "disable": return pluginsSetDisabled(rest, disabled: true)
+    default: return fail("Unknown plugins subcommand: \(sub).")
+    }
+  }
+
+  private static func pluginsList() -> Int32 {
+    let payload: [String: Any] = MainActor.assumeIsolated {
+      var packages: [String: [String: Any]] = [:]
+      for d in ProviderRegistry.shared.descriptors() {
+        let pkgID = d.pluginID ?? "builtin"
+        var pkg = packages[pkgID] ?? ["id": pkgID, "name": d.pluginName ?? pkgID, "providers": [[String: Any]]()]
+        var provs = pkg["providers"] as? [[String: Any]] ?? []
+        provs.append([
+          "id": d.id,
+          "name": d.name,
+          "kind": d.kind == .condition ? "condition" : "action",
+          "engine": d.engine.rawValue
+        ])
+        pkg["providers"] = provs
+        packages[pkgID] = pkg
+      }
+      return [
+        "packages": Array(packages.values),
+        "disabled": Defaults[.disabledPlugins],
+        "localFolders": Defaults[.localMarketplaceFolders],
+        "marketplaces": MarketplaceStore.shared.registeredMarketplaceURLs().map(\.absoluteString)
+      ]
+    }
+    return emitJSONObject(payload)
+  }
+
+  private static func pluginsSetDisabled(_ args: [String], disabled: Bool) -> Int32 {
+    guard let id = args.first, !id.isEmpty else {
+      return fail("Usage: plugins \(disabled ? "disable" : "enable") <package-id>")
+    }
+    var ids = Defaults[.disabledPlugins]
+    if disabled {
+      if !ids.contains(id) { ids.append(id) }
+    } else {
+      ids.removeAll { $0 == id }
+    }
+    Defaults[.disabledPlugins] = ids
+    postChanged()
+    return emit(ids)
+  }
+
+  // MARK: folders
+
+  // Manage local plugin folders (dev). The loader scans each registered folder for
+  // `plugin.json` packages, so an agent can build a plugin on disk and register it
+  // headlessly with `folders add <path>`.
+  private static func runFolders(_ args: [String]) -> Int32 {
+    guard let sub = args.first else {
+      return fail("Missing folders subcommand (list, add, remove).")
+    }
+    let rest = Array(args.dropFirst())
+    switch sub {
+    case "list": return emit(Defaults[.localMarketplaceFolders])
+    case "add": return foldersAdd(rest)
+    case "remove": return foldersRemove(rest)
+    default: return fail("Unknown folders subcommand: \(sub).")
+    }
+  }
+
+  private static func foldersAdd(_ args: [String]) -> Int32 {
+    guard let path = args.first, !path.isEmpty else { return fail("Usage: folders add <path>") }
+    let expanded = (path as NSString).expandingTildeInPath
+    var list = Defaults[.localMarketplaceFolders]
+    if !list.contains(expanded) {
+      list.append(expanded)
+      Defaults[.localMarketplaceFolders] = list
+      postChanged()
+    }
+    return emit(list)
+  }
+
+  private static func foldersRemove(_ args: [String]) -> Int32 {
+    guard let path = args.first, !path.isEmpty else { return fail("Usage: folders remove <path>") }
+    let expanded = (path as NSString).expandingTildeInPath
+    var list = Defaults[.localMarketplaceFolders]
+    list.removeAll { $0 == expanded || $0 == path }
+    Defaults[.localMarketplaceFolders] = list
     postChanged()
     return emit(list)
   }

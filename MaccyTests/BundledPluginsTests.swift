@@ -10,7 +10,7 @@ final class BundledPluginsTests: XCTestCase {
   private static let bundledPluginsURL: URL = {
     let thisFile = URL(fileURLWithPath: #filePath)       // .../MaccyTests/BundledPluginsTests.swift
     let testsDir = thisFile.deletingLastPathComponent()  // .../MaccyTests/
-    let repoRoot = testsDir.deletingLastPathComponent()  // .../Maccay/
+    let repoRoot = testsDir.deletingLastPathComponent()  // .../MaccyPlus/
     return repoRoot
       .appendingPathComponent("Maccy")
       .appendingPathComponent("Resources")
@@ -35,11 +35,11 @@ final class BundledPluginsTests: XCTestCase {
   // MARK: - example-shout (declarative action)
 
   func testShoutActionRegistered() {
-    XCTAssertNotNil(ProviderRegistry.shared.action("com.maccay.example.shout"))
+    XCTAssertNotNil(ProviderRegistry.shared.action("com.maccyplus.example.shout"))
   }
 
   func testShoutActionTransformsHiToSHOUT() async throws {
-    let action = try XCTUnwrap(ProviderRegistry.shared.action("com.maccay.example.shout"))
+    let action = try XCTUnwrap(ProviderRegistry.shared.action("com.maccyplus.example.shout"))
     let input = PluginInput(
       string: "hi",
       kinds: [.text],
@@ -51,24 +51,24 @@ final class BundledPluginsTests: XCTestCase {
   }
 
   func testShoutDescriptor() {
-    let descriptor = ProviderRegistry.shared.action("com.maccay.example.shout")?.descriptor
-    XCTAssertEqual(descriptor?.id, "com.maccay.example.shout")
+    let descriptor = ProviderRegistry.shared.action("com.maccyplus.example.shout")?.descriptor
+    XCTAssertEqual(descriptor?.id, "com.maccyplus.example.shout")
     XCTAssertEqual(descriptor?.engine, .declarative)
     XCTAssertEqual(descriptor?.kind, .action)
     XCTAssertTrue(descriptor?.isVerified == true)
     // Package membership: provider belongs to its owning package.
-    XCTAssertEqual(descriptor?.pluginID, "com.maccay.example-shout")
+    XCTAssertEqual(descriptor?.pluginID, "com.maccyplus.example-shout")
     XCTAssertEqual(descriptor?.pluginName, "Shout")
   }
 
   // MARK: - example-has-url (JS condition)
 
   func testHasURLConditionRegistered() {
-    XCTAssertNotNil(ProviderRegistry.shared.condition("com.maccay.example.has-url"))
+    XCTAssertNotNil(ProviderRegistry.shared.condition("com.maccyplus.example.has-url"))
   }
 
   func testHasURLConditionTrueForHTTPS() throws {
-    let condition = try XCTUnwrap(ProviderRegistry.shared.condition("com.maccay.example.has-url"))
+    let condition = try XCTUnwrap(ProviderRegistry.shared.condition("com.maccyplus.example.has-url"))
     let input = PluginInput(
       string: "Visit https://example.com for details",
       kinds: [.text],
@@ -79,7 +79,7 @@ final class BundledPluginsTests: XCTestCase {
   }
 
   func testHasURLConditionTrueForHTTP() throws {
-    let condition = try XCTUnwrap(ProviderRegistry.shared.condition("com.maccay.example.has-url"))
+    let condition = try XCTUnwrap(ProviderRegistry.shared.condition("com.maccyplus.example.has-url"))
     let input = PluginInput(
       string: "http://insecure.example.org",
       kinds: [.text],
@@ -90,7 +90,7 @@ final class BundledPluginsTests: XCTestCase {
   }
 
   func testHasURLConditionFalseForPlainText() throws {
-    let condition = try XCTUnwrap(ProviderRegistry.shared.condition("com.maccay.example.has-url"))
+    let condition = try XCTUnwrap(ProviderRegistry.shared.condition("com.maccyplus.example.has-url"))
     let input = PluginInput(
       string: "just some plain text",
       kinds: [.text],
@@ -101,13 +101,13 @@ final class BundledPluginsTests: XCTestCase {
   }
 
   func testHasURLDescriptor() {
-    let descriptor = ProviderRegistry.shared.condition("com.maccay.example.has-url")?.descriptor
-    XCTAssertEqual(descriptor?.id, "com.maccay.example.has-url")
+    let descriptor = ProviderRegistry.shared.condition("com.maccyplus.example.has-url")?.descriptor
+    XCTAssertEqual(descriptor?.id, "com.maccyplus.example.has-url")
     XCTAssertEqual(descriptor?.engine, .javascript)
     XCTAssertEqual(descriptor?.kind, .condition)
     XCTAssertTrue(descriptor?.isVerified == true)
     // Package membership: provider belongs to its owning package.
-    XCTAssertEqual(descriptor?.pluginID, "com.maccay.example-has-url")
+    XCTAssertEqual(descriptor?.pluginID, "com.maccyplus.example-has-url")
     XCTAssertEqual(descriptor?.pluginName, "Has URL")
   }
 }

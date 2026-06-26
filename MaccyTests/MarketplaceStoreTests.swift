@@ -34,7 +34,7 @@ final class MarketplaceStoreTests: XCTestCase {
     let store = MarketplaceStore()
     let urls = store.registeredMarketplaceURLs()
     XCTAssertFalse(urls.isEmpty)
-    XCTAssertEqual(urls.first, kMaccayOfficialMarketplaceURL)
+    XCTAssertEqual(urls.first, kMaccyPlusOfficialMarketplaceURL)
   }
 
   func testRegisteredMarketplaceURLsIncludesUserAdded() {
@@ -48,9 +48,9 @@ final class MarketplaceStoreTests: XCTestCase {
   func testRegisteredMarketplaceURLsOfficialNotDuplicatedWhenUserAddsIt() {
     // If the user somehow stores the official URL in Defaults it must not appear twice.
     let store = MarketplaceStore()
-    Defaults[.installedMarketplaces] = [kMaccayOfficialMarketplaceURL.absoluteString]
+    Defaults[.installedMarketplaces] = [kMaccyPlusOfficialMarketplaceURL.absoluteString]
     let urls = store.registeredMarketplaceURLs()
-    let officialCount = urls.filter { $0 == kMaccayOfficialMarketplaceURL }.count
+    let officialCount = urls.filter { $0 == kMaccyPlusOfficialMarketplaceURL }.count
     XCTAssertEqual(officialCount, 1)
   }
 
@@ -198,9 +198,9 @@ final class MarketplaceStoreTests: XCTestCase {
     store.removeLocalFolder(URL(fileURLWithPath: "/tmp/not-registered"))
   }
 
-  // MARK: - kMaccayOfficialMarketplaceURL
+  // MARK: - kMaccyPlusOfficialMarketplaceURL
 
   func testOfficialMarketplaceURLIsHTTPS() {
-    XCTAssertEqual(kMaccayOfficialMarketplaceURL.scheme, "https")
+    XCTAssertEqual(kMaccyPlusOfficialMarketplaceURL.scheme, "https")
   }
 }

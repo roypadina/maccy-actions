@@ -1,13 +1,13 @@
 {
-  "id": "com.maccay.example-shout",
+  "id": "com.maccyplus.example-shout",
   "name": "Shout",
   "version": "1.0.0",
-  "author": { "name": "Maccay" },
+  "author": { "name": "MaccyPlus" },
   "description": "Uppercases the clipboard text and prepends SHOUT:.",
   "capabilities": [],
   "providers": [
     {
-      "id": "com.maccay.example.shout",
+      "id": "com.maccyplus.example.shout",
       "name": "Shout",
       "description": "Uppercases the clipboard text and prepends SHOUT:.",
       "kind": "action",
