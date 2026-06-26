@@ -1,5 +1,5 @@
 
-<img width="128px" src="https://maccy.app/img/maccy/Logo.png" alt="Logo" />
+<img width="128px" src="app-icon.png" alt="MaccyPlus icon" />
 
 # MaccyPlus
 
