@@ -6,7 +6,7 @@
     <description>Most recent changes with links to updates.</description>
     <language>en</language>
     <item>
-      <title>2.6.4</title>
+      <title>2.6.5</title>
       <description>
         <![CDATA[
           <ul>
@@ -17,13 +17,13 @@
         ]]>
       </description>
       <pubDate>Wed, 25 Jun 2026 23:00:00 +0300</pubDate>
-      <releaseNotesLink>https://github.com/roypadina/maccyplus/releases/tag/v2.6.4</releaseNotesLink>
+      <releaseNotesLink>https://github.com/roypadina/maccyplus/releases/tag/v2.6.5</releaseNotesLink>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <enclosure
-        url="https://github.com/roypadina/maccyplus/releases/download/v2.6.4/MaccyPlus.zip"
-        sparkle:version="63"
-        sparkle:shortVersionString="2.6.4"
-        length="4127549"
+        url="https://github.com/roypadina/maccyplus/releases/download/v2.6.5/MaccyPlus.zip"
+        sparkle:version="64"
+        sparkle:shortVersionString="2.6.5"
+        length="4154304"
         type="application/octet-stream"
       />
     </item>
